@@ -13,45 +13,47 @@ import {
   ScrollView
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import userApi from './services/userApi';
 import { setAuthToken } from './services/api';
-import { LinearGradient } from 'expo-linear-gradient'; // Add this for brand buttons
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons'; // Added for the eye icon
 
 export default function LoginScreen() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // New state to toggle password visibility
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
-  if (!identifier || !password) {
-    Alert.alert('Missing fields', 'Please enter credentials');
-    return;
-  }
+    if (!identifier || !password) {
+      Alert.alert('Missing fields', 'Please enter credentials');
+      return;
+    }
 
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
+      const response = await userApi.login(
+        identifier.trim(),
+        password.trim()
+      );
 
-    const response = await userApi.login(
-      identifier.trim(),
-      password.trim()
-    );
+      const { token } = response.data;
+      await setAuthToken(token);
 
-    const { token } = response.data;
+      router.replace('/(tabs)/home');
+    } catch (error) {
+      Alert.alert(
+        'Login Failed',
+        error.response?.data?.error || 'Invalid username/email or password'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    await setAuthToken(token); // 🔥 CRITICAL
-
-    router.replace('/(tabs)/home');
-  } catch (error) {
-    Alert.alert(
-      'Login Failed',
-      error.response?.data?.error || 'Invalid username/email or password'
-    );
-  } finally {
-    setLoading(false);
-  }
-};
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
@@ -63,7 +65,7 @@ export default function LoginScreen() {
           {/* Logo Section */}
           <View style={styles.topSection}>
             <Image
-              source={require('../assets/appicon.png')} // Your Echory Logo
+              source={require('../assets/appicon.png')}
               style={styles.logo}
             />
           </View>
@@ -85,26 +87,38 @@ export default function LoginScreen() {
               />
             </View>
 
+            {/* Password Input with Eye Toggle */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Password</Text>
-              <TextInput
-                style={styles.input}
-                secureTextEntry
-                placeholder="Enter your password"
-                placeholderTextColor="#94A3B8"
-                value={password}
-                onChangeText={setPassword}
-              />
+              <View style={styles.passwordWrapper}>
+                <TextInput
+                  style={[styles.input, { paddingRight: 55 }]} // Space for the icon
+                  secureTextEntry={!showPassword}
+                  placeholder="Enter your password"
+                  placeholderTextColor="#94A3B8"
+                  value={password}
+                  onChangeText={setPassword}
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={() => setShowPassword(!showPassword)}
+                >
+                  <Ionicons 
+                    name={showPassword ? "eye-outline" : "eye-off-outline"} 
+                    size={22} 
+                    color="#78909C" 
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
-            {/* Use LinearGradient for the Brand Feel */}
             <TouchableOpacity 
               style={styles.loginButtonWrapper} 
               onPress={handleLogin}
               disabled={loading}
             >
               <LinearGradient
-                colors={['#8E2DE2', '#4A00E0']} // Echory brand purple/blue
+                colors={['#8E2DE2', '#4A00E0']}
                 style={styles.mainBtn}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
@@ -134,7 +148,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFBF5', // Soft cream from your home design
+    backgroundColor: '#FFFBF5',
   },
   scrollContent: {
     flexGrow: 1,
@@ -156,7 +170,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#1A237E', // Deep Navy
+    color: '#1A237E',
     textAlign: 'center',
   },
   subtitle: {
@@ -176,7 +190,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginLeft: 5,
   },
+  passwordWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   input: {
+    flex: 1,
     height: 55,
     backgroundColor: '#FFF',
     borderRadius: 16,
@@ -185,12 +204,16 @@ const styles = StyleSheet.create({
     color: '#1A237E',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    // Subtle shadow for the input
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 2,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 15,
+    padding: 10,
   },
   loginButtonWrapper: {
     marginTop: 20,

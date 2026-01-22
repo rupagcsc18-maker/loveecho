@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import userApi from './services/userApi';
-import { LinearGradient } from 'expo-linear-gradient'; // Ensure this is installed
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons'; // Icon library included in Expo
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -22,6 +23,9 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // New state for password visibility
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleRegister = async () => {
     if (!username || !email || !password) {
@@ -92,17 +96,29 @@ export default function RegisterScreen() {
               />
             </View>
 
-            {/* Password Input */}
+            {/* Password Input with Eye Icon */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Password</Text>
-              <TextInput
-                style={styles.input}
-                secureTextEntry
-                placeholder="Create a strong password"
-                placeholderTextColor="#94A3B8"
-                value={password}
-                onChangeText={setPassword}
-              />
+              <View style={styles.passwordWrapper}>
+                <TextInput
+                  style={[styles.input, { paddingRight: 50 }]} // Extra padding for the icon
+                  secureTextEntry={!showPassword}
+                  placeholder="Create a strong password"
+                  placeholderTextColor="#94A3B8"
+                  value={password}
+                  onChangeText={setPassword}
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={() => setShowPassword(!showPassword)}
+                >
+                  <Ionicons 
+                    name={showPassword ? "eye-outline" : "eye-off-outline"} 
+                    size={22} 
+                    color="#78909C" 
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Gradient Sign Up Button */}
@@ -142,7 +158,7 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFBF5', // Soft warm cream to match Home/Login
+    backgroundColor: '#FFFBF5',
   },
   scrollContent: {
     flexGrow: 1,
@@ -185,7 +201,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginLeft: 5,
   },
+  passwordWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
   input: {
+    flex: 1,
     height: 55,
     backgroundColor: '#FFF',
     borderRadius: 16,
@@ -194,12 +216,16 @@ const styles = StyleSheet.create({
     color: '#1A237E',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    // Subtle shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 2,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 15,
+    padding: 5,
   },
   btnWrapper: {
     marginTop: 15,

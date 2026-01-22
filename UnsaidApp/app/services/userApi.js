@@ -1,51 +1,42 @@
 import api from './api';
 
- const userApi = {
+const userApi = {
 
   // 📝 REGISTER USER
-  // POST /api/users/register
   register: (userData) =>
     api.post('/users/register', userData),
 
-  // 🔐 LOGIN (username OR email)
-  // POST /api/users/login
+  // 🔐 LOGIN
   login: (usernameOrEmail, password) =>
     api.post('/users/login', {
       usernameOrEmail,
       password,
     }),
 
-  // 👤 GET PUBLIC USER PROFILE (by username)
-  // GET /api/users/{username}
+  // 👤 GET PUBLIC USER PROFILE
   getUserByUsername: (username) =>
     api.get(`/users/${username}`),
 
   // 🙋‍♀️ GET CURRENT LOGGED-IN USER
-  // GET /api/users/me
   getCurrentUser: () =>
     api.get('/users/me'),
 
-  // uploadProfilePicture: (formData) =>
-  // api.post('/users/me/profile-picture', formData, {
-  //   headers: {
-  //     'Content-Type': 'multipart/form-data',
-  //   },
-  // }),
-
+  // 📸 UPLOAD PROFILE PICTURE
+  // We removed the manual 'Content-Type'. 
+  // We also added a specific config object to allow for longer upload times.
   uploadProfilePicture: (formData) =>
-  api.post('/users/me/profile-picture', formData),
+    api.post('/users/me/profile-picture', formData, {
+      transformRequest: (data) => data, // Ensures Axios doesn't stringify the FormData
+      timeout: 60000, // 60 second timeout specifically for uploads
+    }),
 
-
-  // ✏️ Update profile (username/email/password)
-    updateProfile: (data) =>
+  // ✏️ UPDATE PROFILE
+  updateProfile: (data) =>
     api.put('/users/me', data),
 
-    // 🗑️ REMOVE PROFILE PICTURE (auth)
-    // DELETE /api/users/me/profile-picture
-    removeProfilePicture: () =>
-      api.delete('/users/me/profile-picture'),
-
-
+  // 🗑️ REMOVE PROFILE PICTURE
+  removeProfilePicture: () =>
+    api.delete('/users/me/profile-picture'),
 
 };
 
