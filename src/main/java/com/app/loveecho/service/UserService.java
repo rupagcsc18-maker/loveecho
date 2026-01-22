@@ -97,22 +97,20 @@ public class UserService {
         userRepository.save(user);
     }
 
-    // ✅ NEW METHOD for Base64 upload (Expo-safe)
-public User updateProfilePictureBase64(User user, String base64Image) {
+ public User updateProfilePictureBase64(User user, String base64Image) {
 
-    // Delete old image if exists
     if (user.getProfileImagePublicId() != null) {
         cloudinaryService.deleteImage(user.getProfileImagePublicId());
     }
 
-    // Upload base64 image to Cloudinary
     var uploadResult = cloudinaryService.uploadBase64(base64Image);
 
-    user.setProfileImageUrl(uploadResult.get("url"));
-    user.setProfileImagePublicId(uploadResult.get("publicId"));
+    user.setProfileImageUrl(uploadResult.get("url").toString());
+    user.setProfileImagePublicId(uploadResult.get("publicId").toString());
 
     return userRepository.save(user);
 }
+
 
 
     
