@@ -41,4 +41,12 @@ public class CloudinaryService {
             System.err.println("Failed to delete image: " + publicId);
         }
     }
+    public Map uploadBase64(String base64) {
+        try {
+            return cloudinary.uploader().upload(base64, Map.of());
+        } catch (Exception e) {
+            throw new RuntimeException("Cloudinary upload failed", e);
+        }
+    }
+
 }

@@ -224,4 +224,23 @@ public class UserController {
         userService.savePushToken(username, token);
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/me/profile-picture-base64")
+public ResponseEntity<?> uploadProfilePictureBase64(@RequestBody Map<String, String> body) {
+
+    String image = body.get("image");
+
+    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+    UserDetails userDetails = (UserDetails) auth.getPrincipal();
+
+    User user = userService.findByUsername(userDetails.getUsername())
+            .orElseThrow(() -> new RuntimeException("User not found"));
+
+    User updatedUser = userService.updateProfilePictureBase64(user, image);
+
+    return ResponseEntity.ok(
+        Map.of("profileImageUrl", updatedUser.getProfileImageUrl())
+    );
+}
+
 }

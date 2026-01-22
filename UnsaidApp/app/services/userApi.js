@@ -26,7 +26,7 @@ const userApi = {
   // We also added a specific config object to allow for longer upload times.
   uploadProfilePicture: (formData) =>
     api.post('/users/me/profile-picture', formData, {
-      transformRequest: (data) => data, // Ensures Axios doesn't stringify the FormData
+      //transformRequest: (data) => data, // Ensures Axios doesn't stringify the FormData
       timeout: 60000, // 60 second timeout specifically for uploads
     }),
 
@@ -37,6 +37,10 @@ const userApi = {
   // 🗑️ REMOVE PROFILE PICTURE
   removeProfilePicture: () =>
     api.delete('/users/me/profile-picture'),
+
+  uploadProfilePictureBase64: (data) =>
+  api.post('/users/me/profile-picture-base64', data),
+
 
 };
 

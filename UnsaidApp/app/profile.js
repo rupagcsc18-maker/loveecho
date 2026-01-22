@@ -8,6 +8,7 @@ import {
   ScrollView,
   Alert,
   Image,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -66,7 +67,7 @@ export default function ProfileScreen() {
     }
   };
 
-  // ✅ SAFER IMAGE UPLOAD LOGIC
+  // ✅ BASE64 UPLOAD LOGIC (Optimized for Railway Production)
   const handleChangeProfilePic = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -79,33 +80,33 @@ export default function ProfileScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.7, // Reduced slightly for faster upload
+        quality: 0.5,   // Use 0.5 to keep the Base64 string length manageable
+        base64: true,  // 👈 REQUIRED: This generates the base64 string
       });
 
       if (result.canceled) return;
 
       setUploading(true);
-      const image = result.assets[0];
-      const uri = image.uri;
       
-      // Dynamic file type detection
-      const filename = uri.split('/').pop();
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image';
+      // 1. Prepare the Base64 string with the proper prefix
+      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
 
-      const formData = new FormData();
-      formData.append('file', {
-        uri: uri,
-        name: filename,
-        type: type,
+      // 2. Send as a standard JSON object to bypass multipart issues
+      const res = await userApi.uploadProfilePicture({
+        image: base64Image,
       });
 
-      const res = await userApi.uploadProfilePicture(formData);
-      setUser(prev => ({ ...prev, profileImageUrl: res.data.profileImageUrl }));
-      Alert.alert('Success', 'Profile picture updated!');
+      // 3. Update local state with the new URL from backend
+      if (res.data && res.data.profileImageUrl) {
+        setUser(prev => ({ ...prev, profileImageUrl: res.data.profileImageUrl }));
+        Alert.alert('Success', 'Profile picture updated!');
+      }
     } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Failed to upload image. Make sure the file isn\'t too large.');
+      console.error("Upload Error:", error);
+      Alert.alert(
+        'Upload Failed', 
+        'Could not upload image. Please ensure the file is not too large and your connection is stable.'
+      );
     } finally {
       setUploading(false);
     }
@@ -174,7 +175,6 @@ export default function ProfileScreen() {
         <View style={styles.storyInfo}>
           <View style={styles.titleRowInline}>
             <Text style={styles.storyTitleText} numberOfLines={1}>{story.title}</Text>
-            {/* ✅ NEW: Anonymous Indicator for the user */}
             {!isPrivate && story.anonymous && (
               <View style={styles.anonBadge}>
                 <Text style={styles.anonBadgeText}>Anonymous</Text>
@@ -198,6 +198,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color="#1A237E" />
@@ -209,26 +210,40 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* PROFILE CARD */}
         <View style={styles.profileCard}>
-          <TouchableOpacity style={styles.avatarLarge} onPress={handleChangeProfilePic} disabled={uploading}>
+          <TouchableOpacity 
+            style={styles.avatarLarge} 
+            onPress={handleChangeProfilePic} 
+            disabled={uploading}
+          >
             {user?.profileImageUrl ? (
               <Image source={{ uri: user.profileImageUrl }} style={styles.avatarImage} />
             ) : (
               <Text style={styles.avatarText}>{user?.username?.charAt(0).toUpperCase() || 'U'}</Text>
             )}
+            
+            {/* OVERLAY LOADING OR CAMERA ICON */}
             <View style={styles.cameraIcon}>
-              {uploading ? <ActivityIndicator size="small" color="#FFF" /> : <Feather name="camera" size={16} color="#FFF" />}
+              {uploading ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Feather name="camera" size={16} color="#FFF" />
+              )}
             </View>
           </TouchableOpacity>
+
           {user?.profileImageUrl && (
             <TouchableOpacity style={styles.removePicBtn} onPress={handleDeleteProfilePic}>
               <Text style={styles.removePicText}>Remove photo</Text>
             </TouchableOpacity>
           )}
+
           <Text style={styles.username}>@{user?.username}</Text>
           <Text style={styles.email}>{user?.email}</Text>
         </View>
 
+        {/* STATS */}
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
             <Text style={styles.statNumber}>{user?.storiesCount ?? 0}</Text>
@@ -244,6 +259,7 @@ export default function ProfileScreen() {
           <Text style={styles.editButtonText}>Edit Profile</Text>
         </TouchableOpacity>
 
+        {/* VAULT SECTION */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <View style={styles.titleRow}>
@@ -257,6 +273,7 @@ export default function ProfileScreen() {
           {renderStoryList(privateStories, 'PRIVATE')}
         </View>
 
+        {/* PUBLIC STORIES SECTION */}
         <View style={[styles.sectionContainer, { marginTop: 20, marginBottom: 40 }]}>
           <View style={styles.sectionHeader}>
             <View style={styles.titleRow}>
