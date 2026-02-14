@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.app.loveecho.dto.BioRequestDTO;
 import com.app.loveecho.dto.LoginRequest;
 import com.app.loveecho.dto.UpdateProfileRequest;
 import com.app.loveecho.dto.UserResponseDTO;
@@ -149,6 +150,7 @@ public class UserController {
     public ResponseEntity<?> uploadProfilePicture(
             @RequestParam("file") MultipartFile file
     ) {
+        System.out.println("PROFILE PICTURE ENDPOINT HIT");
         Authentication auth =
                 SecurityContextHolder.getContext().getAuthentication();
 
@@ -206,6 +208,7 @@ public class UserController {
                 .email(user.getEmail())
                 .role(user.getRole())
                 .profileImageUrl(user.getProfileImageUrl())
+                .bio(user.getBio())
                 .build();
     }
 
@@ -242,5 +245,53 @@ public ResponseEntity<?> uploadProfilePictureBase64(@RequestBody Map<String, Str
         Map.of("profileImageUrl", updatedUser.getProfileImageUrl())
     );
 }
+
+@PutMapping("/bio")
+public ResponseEntity<?> updateBio(
+        @RequestBody BioRequestDTO request,
+        Authentication authentication
+) {
+    if (authentication == null) {
+        return ResponseEntity.status(401).build();
+    }
+
+    UserDetails userDetails =
+            (UserDetails) authentication.getPrincipal();
+
+    User user = userService.findByUsername(userDetails.getUsername())
+            .orElseThrow(() -> new RuntimeException("User not found"));
+
+    User updatedUser = userService.updateBio(
+            user.getId(),
+            request.getBio()
+    );
+
+    return ResponseEntity.ok(
+            Map.of(
+                    "message", "Bio updated successfully",
+                    "bio", updatedUser.getBio()
+            )
+    );
+}
+
+@PutMapping("/me/privacy")
+public ResponseEntity<?> updatePrivacy(
+        @RequestBody Map<String, Boolean> body,
+        Authentication authentication
+) {
+    UserDetails userDetails =
+            (UserDetails) authentication.getPrincipal();
+
+    User user = userService.findByUsername(userDetails.getUsername())
+            .orElseThrow(() -> new RuntimeException("User not found"));
+
+    user.setPrivate(body.get("isPrivate"));
+    userRepository.save(user);
+
+    return ResponseEntity.ok(
+            Map.of("isPrivate", user.isPrivate())
+    );
+}
+
 
 }

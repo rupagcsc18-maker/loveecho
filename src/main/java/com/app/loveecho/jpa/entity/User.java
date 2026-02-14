@@ -36,4 +36,18 @@ public class User {
     @Column(name = "push_token")
     private String pushToken;
 
+    @Column(length = 500)
+    private String bio;
+
+    @Column(name = "is_private")
+private Boolean isPrivate = false;
+
+public Boolean isPrivate() {
+    return Boolean.TRUE.equals(this.isPrivate);
+}
+
+public void setPrivate(Boolean aPrivate) {
+    this.isPrivate = aPrivate;
+}
+
 }

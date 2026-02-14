@@ -111,7 +111,19 @@ public class UserService {
     return userRepository.save(user);
 }
 
+public User updateBio(Long userId, String bio) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
+        user.setBio(bio);
+        return userRepository.save(user);
+    }
+
+public Long getUserIdByUsername(String username) {
+    return userRepository.findByUsername(username)
+            .orElseThrow(() -> new RuntimeException("User not found"))
+            .getId();
+}
 
     
 

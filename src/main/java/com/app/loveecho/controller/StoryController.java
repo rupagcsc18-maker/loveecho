@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 
 import com.app.loveecho.dto.CommentResponseDTO;
+import com.app.loveecho.dto.EditStoryRequest;
 import com.app.loveecho.dto.StoryResponseDTO;
 import com.app.loveecho.mongo.document.Story;
 import com.app.loveecho.service.CloudinaryService;
@@ -212,23 +213,23 @@ public ResponseEntity<StoryResponseDTO> createStory(
        EDIT STORY
     ========================== */
     @PutMapping("/{id}")
-    public ResponseEntity<StoryResponseDTO> editStory(
-            @PathVariable String id,
-            @RequestBody Map<String, String> body,
-            Authentication authentication
-    ) {
-        if (authentication == null) {
-            return ResponseEntity.status(401).build();
-        }
-
-        return ResponseEntity.ok(
-                storyService.editStory(
-                        id,
-                        body,
-                        authentication.getName()
-                )
-        );
+public ResponseEntity<StoryResponseDTO> editStory(
+        @PathVariable String id,
+        @RequestBody EditStoryRequest body,   // ✅ DTO
+        Authentication authentication
+) {
+    if (authentication == null) {
+        return ResponseEntity.status(401).build();
     }
+
+    return ResponseEntity.ok(
+            storyService.editStory(
+                    id,
+                    body,                        // ✅ DTO passed
+                    authentication.getName()
+            )
+    );
+}
 
     /* =========================
        DELETE STORY

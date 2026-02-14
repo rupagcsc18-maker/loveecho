@@ -52,6 +52,8 @@ public class SecurityConfig {
                 "/api/stories/user/**",
                 "/api/stories/*/comments/paged"
             ).permitAll()
+            .requestMatchers("/api/users/me/profile-picture").authenticated()
+            .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
             // EVERYTHING ELSE NEEDS LOGIN
             .anyRequest().authenticated()

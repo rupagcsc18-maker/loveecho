@@ -2,9 +2,9 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router'; // ✅ Required for redirection
 
-//const API_URL = "http://10.0.2.2:8080/api";
+const API_URL = "http://10.0.2.2:8080/api";
 //const API_URL = 'https://echory-production.up.railway.app/api';
-const API_URL = 'https://loveecho-production.up.railway.app/api';
+//const API_URL = 'https://loveecho-production.up.railway.app/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -30,14 +30,20 @@ export const clearAuthToken = async () => {
 
 // --- 🛰️ REQUEST INTERCEPTOR ---
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
+    if (!authToken) {
+      authToken = await AsyncStorage.getItem('token');
+    }
+
     if (authToken) {
       config.headers.Authorization = `Bearer ${authToken}`;
     }
+
     return config;
   },
   (error) => Promise.reject(error)
 );
+
 
 // --- 🛡️ RESPONSE INTERCEPTOR (The 401 Safety Net) ---
 api.interceptors.response.use(

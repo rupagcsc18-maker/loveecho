@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
   Platform,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -27,6 +28,11 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   
+  // Bio States
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [bioText, setBioText] = useState('');
+  const [isSavingBio, setIsSavingBio] = useState(false);
+
   const [privateStories, setPrivateStories] = useState([]);
   const [publicStories, setPublicStories] = useState([]);
   const [storiesLoading, setStoriesLoading] = useState(false);
@@ -45,6 +51,7 @@ export default function ProfileScreen() {
     try {
       const res = await userApi.getCurrentUser();
       setUser(res.data);
+      setBioText(res.data.bio || ''); // Initialize bio from server
     } catch (error) {
       console.error('Failed to fetch user', error);
     }
@@ -67,46 +74,72 @@ export default function ProfileScreen() {
     }
   };
 
-  // ✅ BASE64 UPLOAD LOGIC (Optimized for Railway Production)
+  // --- BIO HANDLER ---
+  const handleSaveBio = async () => {
+    if (bioText.length > 150) {
+        Alert.alert("Too long", "Bio must be under 150 characters.");
+        return;
+    }
+    try {
+      setIsSavingBio(true);
+      await userApi.updateBio(bioText);
+      setUser(prev => ({ ...prev, bio: bioText }));
+      setIsEditingBio(false);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update bio. Please try again.');
+    } finally {
+      setIsSavingBio(false);
+    }
+  };
+
+  // --- PROFILE PIC HANDLERS ---
   const handleChangeProfilePic = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permission required', 'Please allow access to your gallery');
+        Alert.alert('Permission required', 'Please allow gallery access');
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.5,   // Use 0.5 to keep the Base64 string length manageable
-        base64: true,  // 👈 REQUIRED: This generates the base64 string
+        quality: 0.8,
       });
 
       if (result.canceled) return;
 
       setUploading(true);
-      
-      // 1. Prepare the Base64 string with the proper prefix
-      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      const imageUri = result.assets[0].uri;
+      const filename = imageUri.split('/').pop() || 'profile.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
 
-      // 2. Send as a standard JSON object to bypass multipart issues
-      const res = await userApi.uploadProfilePicture({
-        image: base64Image,
+      const formData = new FormData();
+      formData.append('file', {
+        uri: Platform.OS === 'android' ? imageUri : imageUri.replace('file://', ''),
+        name: filename,
+        type: type,
       });
 
-      // 3. Update local state with the new URL from backend
-      if (res.data && res.data.profileImageUrl) {
-        setUser(prev => ({ ...prev, profileImageUrl: res.data.profileImageUrl }));
-        Alert.alert('Success', 'Profile picture updated!');
-      }
-    } catch (error) {
-      console.error("Upload Error:", error);
-      Alert.alert(
-        'Upload Failed', 
-        'Could not upload image. Please ensure the file is not too large and your connection is stable.'
+      const token = await AsyncStorage.getItem('token');
+      const response = await fetch(
+        'http://10.0.2.2:8080/api/users/me/profile-picture',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        }
       );
+
+      if (!response.ok) throw new Error('Upload failed');
+
+      const data = await response.json();
+      setUser(prev => ({ ...prev, profileImageUrl: data.profileImageUrl }));
+      Alert.alert('Success', 'Profile picture updated!');
+    } catch (error) {
+      Alert.alert('Upload Failed', 'Network error');
     } finally {
       setUploading(false);
     }
@@ -223,7 +256,6 @@ export default function ProfileScreen() {
               <Text style={styles.avatarText}>{user?.username?.charAt(0).toUpperCase() || 'U'}</Text>
             )}
             
-            {/* OVERLAY LOADING OR CAMERA ICON */}
             <View style={styles.cameraIcon}>
               {uploading ? (
                 <ActivityIndicator size="small" color="#FFF" />
@@ -241,6 +273,48 @@ export default function ProfileScreen() {
 
           <Text style={styles.username}>@{user?.username}</Text>
           <Text style={styles.email}>{user?.email}</Text>
+
+          {/* BIO SECTION */}
+          <View style={styles.bioContainer}>
+            {isEditingBio ? (
+              <View style={styles.bioEditWrapper}>
+                <TextInput
+                  style={styles.bioInput}
+                  value={bioText}
+                  onChangeText={setBioText}
+                  placeholder="Tell the world your story..."
+                  multiline
+                  maxLength={150}
+                  autoFocus
+                />
+                <View style={styles.bioActionRow}>
+                    <TouchableOpacity onPress={() => {
+                        setBioText(user?.bio || '');
+                        setIsEditingBio(false);
+                    }}>
+                        <Text style={styles.bioCancelBtn}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleSaveBio} disabled={isSavingBio}>
+                        {isSavingBio ? (
+                            <ActivityIndicator size="small" color="#1A237E" />
+                        ) : (
+                            <Text style={styles.bioSaveBtn}>Save</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity 
+                style={styles.bioDisplayRow} 
+                onPress={() => setIsEditingBio(true)}
+              >
+                <Text style={[styles.bioText, !user?.bio && styles.bioPlaceholder]}>
+                  {user?.bio || "Add a bio..."}
+                </Text>
+                <Feather name="edit-3" size={14} color="#78909C" style={{ marginLeft: 8 }} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* STATS */}
@@ -294,7 +368,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#1A237E' },
   content: { alignItems: 'center', padding: 20 },
-  profileCard: { alignItems: 'center', marginBottom: 20 },
+  profileCard: { alignItems: 'center', marginBottom: 20, width: '100%' },
   avatarLarge: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#D1E3FF', justifyContent: 'center', alignItems: 'center', marginBottom: 10, overflow: 'hidden' },
   avatarImage: { width: '100%', height: '100%' },
   avatarText: { fontSize: 40, fontWeight: 'bold', color: '#1A237E' },
@@ -303,6 +377,18 @@ const styles = StyleSheet.create({
   removePicText: { color: '#E53935', fontSize: 14, fontWeight: '600' },
   username: { fontSize: 24, fontWeight: 'bold', color: '#1A237E' },
   email: { fontSize: 16, color: '#78909C', marginTop: 5 },
+  
+  // Bio Styles
+  bioContainer: { marginTop: 15, width: '100%', alignItems: 'center', paddingHorizontal: 20 },
+  bioDisplayRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  bioText: { fontSize: 14, color: '#455A64', textAlign: 'center', lineHeight: 20 },
+  bioPlaceholder: { color: '#CFD8DC', fontStyle: 'italic' },
+  bioEditWrapper: { width: '100%', backgroundColor: '#FFF', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#E0E0E0' },
+  bioInput: { fontSize: 14, color: '#333', minHeight: 60, textAlignVertical: 'top' },
+  bioActionRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 15 },
+  bioCancelBtn: { color: '#78909C', fontWeight: '500' },
+  bioSaveBtn: { color: '#1A237E', fontWeight: 'bold' },
+
   statsRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-around', marginVertical: 15 },
   statBox: { alignItems: 'center' },
   statNumber: { fontSize: 20, fontWeight: 'bold', color: '#1A237E' },

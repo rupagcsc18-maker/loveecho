@@ -23,6 +23,9 @@ import userApi from '../../services/userApi';
 import HashtagText from '../../components/HashtagText';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Screen Width - Screen Margins (16*2) - Card Padding (20*2)
+const IMAGE_WIDTH = SCREEN_WIDTH - 72; 
+
 const backgroundImage = require('../../assets/storyBg2.png');
 
 const formatTimeAgo = (date) => {
@@ -64,11 +67,19 @@ export default function StoryDetailScreen() {
         storyService.getStoryById(id),
         userApi.getCurrentUser().catch(() => ({ data: null }))
       ]);
+      
       setStory(storyRes.data);
       setCurrentUser(userRes.data);
-      const commentRes = await storyService.getComments(id, 0, 50);
-      setComments(commentRes.data?.content || []);
+      
+      // Load comments from response if present, else fetch
+      if (storyRes.data.comments) {
+        setComments(storyRes.data.comments);
+      } else {
+        const commentRes = await storyService.getComments(id, 0, 50);
+        setComments(commentRes.data?.content || []);
+      }
     } catch (error) {
+      console.error("Init Error:", error);
       Alert.alert("Error", "Could not load story details.");
     } finally {
       setLoading(false);
@@ -77,9 +88,9 @@ export default function StoryDetailScreen() {
 
   const scrollImages = (direction) => {
     const nextIndex = direction === 'next' ? currentImgIndex + 1 : currentImgIndex - 1;
-    if (nextIndex >= 0 && nextIndex < story.imageUrls.length) {
+    if (nextIndex >= 0 && nextIndex < (story?.imageUrls?.length || 0)) {
       imageScrollRef.current?.scrollTo({
-        x: nextIndex * (SCREEN_WIDTH - 72),
+        x: nextIndex * IMAGE_WIDTH,
         animated: true
       });
       setCurrentImgIndex(nextIndex);
@@ -87,8 +98,8 @@ export default function StoryDetailScreen() {
   };
 
   const onImageScroll = (event) => {
-    const slide = Math.round(event.nativeEvent.contentOffset.x / (SCREEN_WIDTH - 72));
-    if (slide !== currentImgIndex) {
+    const slide = Math.round(event.nativeEvent.contentOffset.x / IMAGE_WIDTH);
+    if (slide !== currentImgIndex && slide >= 0) {
       setCurrentImgIndex(slide);
     }
   };
@@ -144,8 +155,9 @@ export default function StoryDetailScreen() {
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#2D4F1E" /></View>;
+  if (!story) return <View style={styles.center}><Text>Story not found</Text></View>;
 
-  const hasImages = story?.imageUrls && story.imageUrls.length > 0;
+  const hasImages = Array.isArray(story.imageUrls) && story.imageUrls.length > 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -192,10 +204,9 @@ export default function StoryDetailScreen() {
 
               <Text style={styles.title}>{story.title}</Text>
               
-              {/* 1. TEXT CONTENT FIRST */}
               <HashtagText text={story.content} style={styles.contentBody} />
 
-              {/* 2. IMAGES BELOW CONTENT */}
+              {/* IMAGE GALLERY */}
               {hasImages && (
                 <View style={styles.galleryWrapper}>
                   <ScrollView
@@ -205,17 +216,21 @@ export default function StoryDetailScreen() {
                     showsHorizontalScrollIndicator={false}
                     onScroll={onImageScroll}
                     scrollEventThrottle={16}
+                    decelerationRate="fast"
+                    snapToInterval={IMAGE_WIDTH}
                   >
                     {story.imageUrls.map((url, index) => (
-                      <View key={index} style={styles.imageContainer}>
-                        {!loadedImages[index] && (
-                          <ActivityIndicator style={StyleSheet.absoluteFill} color="#2D4F1E" />
-                        )}
+                      <View key={`${url}-${index}`} style={styles.imageContainer}>
                         <Image 
                           source={{ uri: url }} 
                           style={styles.storyImage} 
                           onLoad={() => setLoadedImages(prev => ({...prev, [index]: true}))}
                         />
+                        {!loadedImages[index] && (
+                          <View style={styles.imageLoader}>
+                            <ActivityIndicator color="#2D4F1E" />
+                          </View>
+                        )}
                       </View>
                     ))}
                   </ScrollView>
@@ -242,7 +257,7 @@ export default function StoryDetailScreen() {
                     <View style={styles.paginationRow}>
                       {story.imageUrls.map((_, i) => (
                         <View 
-                          key={i} 
+                          key={`dot-${i}`} 
                           style={[styles.dot, currentImgIndex === i && styles.activeDot]} 
                         />
                       ))}
@@ -279,8 +294,8 @@ export default function StoryDetailScreen() {
 
             <Text style={styles.commentSectionTitle}>Community Echoes</Text>
             
-            {comments.map((item) => (
-              <View key={item.id} style={[styles.commentItem, item.isReply && { marginLeft: 40 }]}>
+            {comments.map((item, index) => (
+              <View key={item.id || index} style={[styles.commentItem, item.isReply && { marginLeft: 40 }]}>
                 <Image source={{ uri: item.profileImageUrl }} style={styles.commentAvatar} />
                 <View style={styles.commentBubble}>
                   <Text style={styles.commentUser}>{item.username}</Text>
@@ -295,6 +310,7 @@ export default function StoryDetailScreen() {
             <View style={{ height: 100 }} />
           </ScrollView>
 
+          {/* FIXED INPUT AREA */}
           <View style={styles.footer}>
             {replyingTo && (
               <View style={styles.replyingBar}>
@@ -336,7 +352,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', 
     paddingHorizontal: 16, 
     height: 60,
-    backgroundColor: 'rgba(253, 245, 230, 0.85)', 
+    backgroundColor: 'rgba(253, 245, 230, 0.9)', 
   },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#2D4F1E' },
   iconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.6)', justifyContent: 'center', alignItems: 'center' },
@@ -345,13 +361,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.92)',
     padding: 20, 
     borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
     elevation: 4,
     marginBottom: 25,
-    marginTop: 10,
   },
   userSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFF', overflow: 'hidden', borderWidth: 1, borderColor: '#EEE' },
@@ -359,33 +370,37 @@ const styles = StyleSheet.create({
   userInfo: { marginLeft: 12 },
   username: { fontSize: 14, fontWeight: '700', color: '#333' },
   date: { fontSize: 11, color: '#90A4AE', marginTop: 2 },
-  title: { fontSize: 22, fontWeight: '800', color: '#2D4F1E', marginBottom: 10, lineHeight: 28 },
-  
-  // GALLERY STYLES
+  title: { fontSize: 22, fontWeight: '800', color: '#2D4F1E', marginBottom: 10 },
   galleryWrapper: {
-    marginTop: 15, // Spacing above images
-    marginBottom: 5, // Spacing below images
+    marginTop: 15,
+    marginBottom: 10,
     borderRadius: 16,
     overflow: 'hidden',
     height: 300,
+    width: '100%',
     backgroundColor: '#F5F5F5',
-    position: 'relative'
   },
   imageContainer: {
-    width: SCREEN_WIDTH - 72,
+    width: IMAGE_WIDTH,
     height: 300,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5'
   },
   storyImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover'
   },
+  imageLoader: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
   navArrow: {
     position: 'absolute',
     top: '45%',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -404,7 +419,6 @@ const styles = StyleSheet.create({
   },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.5)' },
   activeDot: { backgroundColor: '#FFF', width: 12 },
-
   contentBody: { fontSize: 16, color: '#444', lineHeight: 26 },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
   statItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -416,26 +430,12 @@ const styles = StyleSheet.create({
   commentSectionTitle: { fontSize: 15, fontWeight: '800', color: '#2D4F1E', marginLeft: 5, marginBottom: 15 },
   commentItem: { flexDirection: 'row', marginBottom: 16, gap: 12 },
   commentAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#EEE' },
-  commentBubble: { 
-    flex: 1, 
-    backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-    padding: 12, 
-    borderRadius: 18,
-    borderTopLeftRadius: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    elevation: 1,
-  },
+  commentBubble: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.95)', padding: 12, borderRadius: 18, borderTopLeftRadius: 2, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)' },
   commentUser: { fontWeight: '700', fontSize: 13, color: '#333' },
   commentText: { fontSize: 14, color: '#555', marginTop: 2 },
   replyButton: { marginTop: 6 },
   replyButtonText: { fontSize: 11, fontWeight: '800', color: '#78909C' },
-  footer: { 
-    padding: 12,
-    backgroundColor: 'rgba(253, 245, 230, 0.95)', 
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)'
-  },
+  footer: { padding: 12, backgroundColor: 'rgba(253, 245, 230, 0.95)', borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)' },
   replyingBar: { flexDirection: 'row', justifyContent: 'space-between', padding: 8, backgroundColor: '#F5F5F5', borderRadius: 10, marginBottom: 8 },
   replyingText: { fontSize: 12, color: '#666' },
   commentInputContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },

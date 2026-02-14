@@ -34,12 +34,21 @@ const userApi = {
   updateProfile: (data) =>
     api.put('/users/me', data),
 
+  updateBio: (bio) =>
+    api.put('/users/bio', { bio }),
+  
   // 🗑️ REMOVE PROFILE PICTURE
   removeProfilePicture: () =>
     api.delete('/users/me/profile-picture'),
 
   uploadProfilePictureBase64: (data) =>
   api.post('/users/me/profile-picture-base64', data),
+
+  uploadProfilePicture: (formData, config = {}) =>
+  api.post('/users/me/profile-picture', formData, {
+    ...config,
+    transformRequest: (data) => data,
+  }),
 
 
 };

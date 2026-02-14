@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.app.loveecho.dto.CommentResponseDTO;
+import com.app.loveecho.dto.EditStoryRequest;
 import com.app.loveecho.dto.StoryResponseDTO;
 import com.app.loveecho.dto.UserMiniDTO;
 import com.app.loveecho.exception.ResourceNotFoundException;
@@ -366,32 +367,33 @@ public class StoryService {
 
 public StoryResponseDTO editStory(
         String storyId,
-        Map<String, String> body,
+        EditStoryRequest body,
         String username
 ) {
     Story story = storyRepository.findById(storyId)
-            .orElseThrow(() ->
-                    new ResourceNotFoundException("Story not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Story not found"));
 
     // 🔐 Ownership check
     if (!story.getUserId().equals(username)) {
         throw new RuntimeException("Access denied");
     }
 
-    // ✏️ Update allowed fields
-    if (body.containsKey("title")) {
-        story.setTitle(body.get("title"));
+    if (body.getTitle() != null) {
+        story.setTitle(body.getTitle());
     }
 
-    if (body.containsKey("content")) {
-        story.setContent(body.get("content"));
-        story.setHashtags(extractHashtags(body.get("content")));
+    if (body.getContent() != null) {
+        story.setContent(body.getContent());
+        story.setHashtags(extractHashtags(body.getContent()));
     }
 
-    if (body.containsKey("visibility")) {
-        story.setVisibility(
-                Visibility.valueOf(body.get("visibility"))
-        );
+    if (body.getVisibility() != null) {
+        story.setVisibility(body.getVisibility());
+    }
+
+    // ✅ THIS LINE PREVENTS YOUR ERROR
+    if (body.getImageUrls() != null) {
+        story.setImageUrls(body.getImageUrls());
     }
 
     story.setUpdatedAt(LocalDateTime.now());
