@@ -18,6 +18,7 @@ import { setAuthToken } from './services/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons'; // Added for the eye icon
 
+
 export default function LoginScreen() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState('');
@@ -27,32 +28,36 @@ export default function LoginScreen() {
   // New state to toggle password visibility
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleLogin = async () => {
-    if (!identifier || !password) {
-      Alert.alert('Missing fields', 'Please enter credentials');
-      return;
-    }
+ const handleLogin = async () => {
+  if (!identifier || !password) {
+    Alert.alert('Missing fields', 'Please enter credentials');
+    return;
+  }
 
-    try {
-      setLoading(true);
-      const response = await userApi.login(
-        identifier.trim(),
-        password.trim()
-      );
+  try {
+    setLoading(true);
 
-      const { token } = response.data;
-      await setAuthToken(token);
+    const response = await userApi.login(
+      identifier.trim(),
+      password.trim()
+    );
 
-      router.replace('/(tabs)/home');
-    } catch (error) {
-      Alert.alert(
-        'Login Failed',
-        error.response?.data?.error || 'Invalid username/email or password'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+    const { token } = response.data;
+
+    // ✅ ONLY THIS (stores + attaches header)
+    await setAuthToken(token);
+
+    router.replace('/(tabs)/home');
+
+  } catch (error) {
+    Alert.alert(
+      'Login Failed',
+      error.response?.data?.error || 'Invalid username/email or password'
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <SafeAreaView style={styles.container}>

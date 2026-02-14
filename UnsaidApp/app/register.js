@@ -39,14 +39,28 @@ export default function RegisterScreen() {
       Alert.alert('Success', 'Account created successfully!');
       router.push('/login');
     } catch (error) {
-      Alert.alert(
-        'Registration Failed',
-        error.response?.data?.error || 'Something went wrong'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  console.log("REGISTER ERROR:", error);
+  console.log("REGISTER RESPONSE:", error?.response);
+  console.log("REGISTER DATA:", error?.response?.data);
+
+  let message = "Unknown error";
+
+  if (error.response) {
+    // Server responded
+    message = error.response?.data?.error || "Server rejected request";
+  } 
+  else if (error.request) {
+    // Request sent but no response
+    message = "Cannot reach server (network / https / sleep)";
+  } 
+  else {
+    // Something else
+    message = error.message;
+  }
+
+  Alert.alert("Registration Failed", message);
+}
+  }
 
   return (
     <SafeAreaView style={styles.container}>

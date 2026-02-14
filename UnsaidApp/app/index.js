@@ -1,11 +1,45 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken } from './services/api';
 import LottieView from 'lottie-react-native';
 
-export default function WelcomeScreen() {
+export default function Index() {
   const router = useRouter();
+  const [checking, setChecking] = useState(true);
 
+  useEffect(() => {
+  const checkLogin = async () => {
+    try {
+      const token = await restoreAuthToken();
+
+      if (token) {
+        router.replace('/(tabs)/home');
+        return;
+      }
+
+    } catch (e) {
+      console.log("Token restore failed", e);
+    }
+
+    setChecking(false);
+  };
+
+  checkLogin();
+}, []);
+
+
+  // While checking token → show loader
+  if (checking) {
+    return (
+      <View style={{flex:1,justifyContent:'center',alignItems:'center'}}>
+        <ActivityIndicator size="large"/>
+      </View>
+    );
+  }
+
+  // 👇 Your original welcome UI below
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.animationContainer}>
@@ -41,6 +75,7 @@ export default function WelcomeScreen() {
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: { 

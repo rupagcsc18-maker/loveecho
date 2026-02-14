@@ -54,12 +54,24 @@ public class UserController {
     // ✅ REGISTER
     // =======================
     @PostMapping("/register")
-    public ResponseEntity<UserResponseDTO> registerUser(
-            @RequestBody User user
-    ) {
+public ResponseEntity<?> registerUser(@RequestBody User user) {
+    try {
         User savedUser = userService.registerUser(user);
         return ResponseEntity.ok(mapToDTO(savedUser));
+
+    } catch (RuntimeException e) {
+        return ResponseEntity
+                .badRequest()
+                .body(Map.of("error", e.getMessage()));
+
+    } catch (Exception e) {
+        e.printStackTrace();
+        return ResponseEntity
+                .internalServerError()
+                .body(Map.of("error", "Server error: " + e.getMessage()));
     }
+}
+
 
     // =======================
     // 🔓 PUBLIC PROFILE

@@ -33,31 +33,33 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())  
             .authorizeHttpRequests(auth -> auth
 
-            // AUTH APIs
-            .requestMatchers(HttpMethod.GET, "/api/users/*").permitAll()
-            .requestMatchers("/api/users/login", "/api/users/register").permitAll()
-            .requestMatchers("/api/users/me/**").authenticated()
-            .requestMatchers(HttpMethod.GET,
-                "/api/stories",
-                "/api/stories/**"
-            ).permitAll()
+    // ---------- PUBLIC AUTH ----------
+    .requestMatchers("/api/users/login", "/api/users/register").permitAll()
+    .requestMatchers(HttpMethod.GET, "/api/users/*").permitAll()
 
-            // PUBLIC STORY READ APIs
-            .requestMatchers(
-                "/api/stories",
-                "/api/stories/paged",
-                "/api/stories/category/**",
-                "/api/stories/hashtag/**",
-                "/api/stories/search",
-                "/api/stories/user/**",
-                "/api/stories/*/comments/paged"
-            ).permitAll()
-            .requestMatchers("/api/users/me/profile-picture").authenticated()
-            .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+    // ---------- PUBLIC STORY READ ----------
+    .requestMatchers(HttpMethod.GET,
+            "/api/stories",
+            "/api/stories/**"
+    ).permitAll()
 
-            // EVERYTHING ELSE NEEDS LOGIN
-            .anyRequest().authenticated()
-        )
+    // ---------- PROTECTED STORY WRITE ----------
+    .requestMatchers(HttpMethod.POST, "/api/stories/**").authenticated()
+    .requestMatchers(HttpMethod.PUT, "/api/stories/**").authenticated()
+    .requestMatchers(HttpMethod.DELETE, "/api/stories/**").authenticated()
+    .requestMatchers(HttpMethod.PATCH, "/api/stories/**").authenticated()
+
+    // ---------- USER PROTECTED ----------
+    .requestMatchers("/api/users/me/**").authenticated()
+
+    // Allow spring error dispatcher (VERY IMPORTANT)
+    .requestMatchers("/error").permitAll()
+
+    // OPTIONS for mobile apps
+    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+    .anyRequest().authenticated()
+)
 
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)

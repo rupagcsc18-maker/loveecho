@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 
+
 // Services
 import userApi from './services/userApi';
 import { storyService } from './services/storyService';
@@ -167,18 +168,26 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: async () => {
-          await AsyncStorage.multiRemove(['token', 'username']);
-          router.replace('/login');
-        },
+  Alert.alert('Logout', 'Are you sure?', [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Logout',
+      style: 'destructive',
+      onPress: async () => {
+
+        // 1️⃣ Remove stored data
+        await AsyncStorage.multiRemove(['token', 'username']);
+
+        // 2️⃣ Remove auth header from axios
+        setAuthToken(null);
+
+        // 3️⃣ Navigate
+        router.replace('/login');
       },
-    ]);
-  };
+    },
+  ]);
+};
+
 
   const renderStoryList = (stories, type) => {
     const isPrivate = type === 'PRIVATE';
