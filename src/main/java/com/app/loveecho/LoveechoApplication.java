@@ -4,25 +4,41 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.mongodb.config.EnableMongoAuditing;
 
+import java.net.URI;
+
 @SpringBootApplication
 @EnableMongoAuditing
 public class LoveechoApplication {
 
     public static void main(String[] args) {
 
-        // --- Convert Render DATABASE_URL to JDBC format ---
-        String databaseUrl = System.getenv("DATABASE_URL");
+        try {
+            String databaseUrl = System.getenv("DATABASE_URL");
 
-        if (databaseUrl != null && databaseUrl.startsWith("postgres")) {
+            if (databaseUrl != null && databaseUrl.startsWith("postgres")) {
 
-            // postgres://user:pass@host:5432/db
-            databaseUrl = databaseUrl
-                    .replace("postgres://", "jdbc:postgresql://")
-                    .replace("postgresql://", "jdbc:postgresql://");
+                URI uri = new URI(databaseUrl);
 
-            System.setProperty("SPRING_DATASOURCE_URL", databaseUrl);
+                String[] userInfo = uri.getUserInfo().split(":");
+                String username = userInfo[0];
+                String password = userInfo[1];
 
-            System.out.println("Converted DATABASE_URL -> " + databaseUrl);
+                String host = uri.getHost();
+                int port = (uri.getPort() == -1) ? 5432 : uri.getPort();
+                String database = uri.getPath();
+
+                String jdbcUrl = "jdbc:postgresql://" + host + ":" + port + database +
+                        "?user=" + username +
+                        "&password=" + password +
+                        "&sslmode=require";
+
+                System.setProperty("SPRING_DATASOURCE_URL", jdbcUrl);
+
+                System.out.println("✅ JDBC URL GENERATED: " + jdbcUrl);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
         }
 
         SpringApplication.run(LoveechoApplication.class, args);
