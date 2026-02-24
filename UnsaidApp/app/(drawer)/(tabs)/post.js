@@ -15,6 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { storyService } from '../../services/storyService';
+import  PostOptionsModal  from '../../components/PostOptionsModal';
+import { useToast } from '../../context/ToastContext';
 
 export default function PostScreen() {
   const router = useRouter();
@@ -27,6 +29,9 @@ export default function PostScreen() {
   const [images, setImages] = useState([]); // Array of { uri }
 
   const categories = ['General', 'Healing', 'Love', 'Heartbreak', 'Motivation', 'Life'];
+  const [showOptions, setShowOptions] = useState(false);
+  const { showSuccess, showError, showInfo } = useToast();
+
 
   // 1. Pick Image Logic
   const pickImage = async () => {
@@ -63,50 +68,67 @@ export default function PostScreen() {
 
   const onPressRelease = () => {
     if (!content.trim()) {
-      Alert.alert('Empty story', 'Please write something before posting');
+      showError('Empty story', 'Please write something before posting');
       return;
     }
 
     if (visibility === 'PRIVATE') {
       submitPost(false);
     } else {
-      Alert.alert(
-        'Release Story',
-        'How would you like to share this with the world?',
-        [
-          { text: 'Post Publicly', onPress: () => submitPost(false) },
-          { text: 'Post Anonymously', onPress: () => submitPost(true) },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
+      setShowOptions(true);
+      // Alert.alert(
+      //   'Release Story',
+      //   'How would you like to share this with the world?',
+      //   [
+      //     { text: 'Post Publicly', onPress: () => submitPost(false) },
+      //     { text: 'Post Anonymously', onPress: () => submitPost(true) },
+      //     { text: 'Cancel', style: 'cancel' },
+      //   ]
+      // );
     }
   };
 
   const submitPost = async (isAnonymous) => {
-    try {
-      setPosting(true);
+  try {
+    setPosting(true);
 
-      // Matches your updated storyService logic
-      await storyService.createStory({
-        title: title.trim() || 'Unsaid',
-        content: content.trim(),
-        visibility: visibility,
-        category: category.toUpperCase(),
-        anonymous: isAnonymous,
-        images: images // array of picked image objects
-      });
+    await storyService.createStory({
+      title: title.trim() || 'Unsaid',
+      content: content.trim(),
+      visibility: visibility,
+      category: category.toUpperCase(),
+      anonymous: isAnonymous,
+      images: images
+    });
 
-      setTitle('');
-      setContent('');
-      setImages([]);
-      router.replace('/(tabs)/explore');
-    } catch (error) {
-      console.error("Post Error:", error.response?.data || error.message);
-      Alert.alert('Error', 'Failed to post story. Check your connection.');
-    } finally {
-      setPosting(false);
-    }
-  };
+    // Clear inputs
+    setTitle('');
+    setContent('');
+    setImages([]);
+
+    // 🔥 EchoRy emotional feedback
+    showSuccess(
+      visibility === 'PRIVATE'
+        ? "Saved to your vault 🔒"
+        : isAnonymous
+        ? "Your echo reached someone 🌙"
+        : "Your story is now out in the world ✨"
+    );
+
+    router.replace('/(tabs)/explore');
+
+  } catch (error) {
+    console.error("Post Error:", error.response?.data || error.message);
+
+    showError(
+      error?.response?.data?.message ||
+      "Couldn't share your story. Try again."
+    );
+
+  } finally {
+    setPosting(false);
+  }
+};
 
   return (
     <SafeAreaView style={styles.container}>
@@ -211,6 +233,20 @@ export default function PostScreen() {
             {visibility === 'PRIVATE' ? 'Vaulted.' : 'Shared.'}
           </Text>
         </View>
+
+        {/* 🌙 POST OPTIONS MODAL */}
+      <PostOptionsModal
+        visible={showOptions}
+        onClose={() => setShowOptions(false)}
+        onPublic={() => {
+          setShowOptions(false);
+          submitPost(false);
+        }}
+        onAnon={() => {
+          setShowOptions(false);
+          submitPost(true);
+        }}
+      />
       </View>
     </SafeAreaView>
   );

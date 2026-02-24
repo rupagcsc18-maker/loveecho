@@ -24,11 +24,11 @@ const userApi = {
   // 📸 UPLOAD PROFILE PICTURE
   // We removed the manual 'Content-Type'. 
   // We also added a specific config object to allow for longer upload times.
-  uploadProfilePicture: (formData) =>
-    api.post('/users/me/profile-picture', formData, {
-      //transformRequest: (data) => data, // Ensures Axios doesn't stringify the FormData
-      timeout: 60000, // 60 second timeout specifically for uploads
-    }),
+  // uploadProfilePicture: (formData) =>
+  //   api.post('/users/me/profile-picture', formData, {
+  //     //transformRequest: (data) => data, // Ensures Axios doesn't stringify the FormData
+  //     timeout: 60000, // 60 second timeout specifically for uploads
+  //   }),
 
   // ✏️ UPDATE PROFILE
   updateProfile: (data) =>
@@ -44,11 +44,23 @@ const userApi = {
   uploadProfilePictureBase64: (data) =>
   api.post('/users/me/profile-picture-base64', data),
 
-  uploadProfilePicture: (formData, config = {}) =>
-  api.post('/users/me/profile-picture', formData, {
-    ...config,
-    transformRequest: (data) => data,
-  }),
+  // uploadProfilePicture: (formData, config = {}) =>
+  // api.post('/users/me/profile-picture', formData, {
+  //   ...config,
+  //   transformRequest: (data) => data,
+  // }),
+
+  uploadProfilePicture: async (formData) => {
+  const token = await AsyncStorage.getItem("token");
+
+  return api.post('/users/me/profile-picture', formData, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "multipart/form-data",
+    },
+    timeout: 60000,
+  });
+},
 
 
 };

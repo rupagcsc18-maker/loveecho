@@ -16,11 +16,14 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-
+import { clearAuthToken } from './services/api';
 
 // Services
 import userApi from './services/userApi';
 import { storyService } from './services/storyService';
+
+import { useAuth } from './context/AuthContext';
+
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -37,6 +40,7 @@ export default function ProfileScreen() {
   const [privateStories, setPrivateStories] = useState([]);
   const [publicStories, setPublicStories] = useState([]);
   const [storiesLoading, setStoriesLoading] = useState(false);
+  const { logout } = useAuth();
 
   useEffect(() => {
     fetchInitialData();
@@ -95,56 +99,63 @@ export default function ProfileScreen() {
 
   // --- PROFILE PIC HANDLERS ---
   const handleChangeProfilePic = async () => {
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission required', 'Please allow gallery access');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (result.canceled) return;
-
-      setUploading(true);
-      const imageUri = result.assets[0].uri;
-      const filename = imageUri.split('/').pop() || 'profile.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image/jpeg';
-
-      const formData = new FormData();
-      formData.append('file', {
-        uri: Platform.OS === 'android' ? imageUri : imageUri.replace('file://', ''),
-        name: filename,
-        type: type,
-      });
-
-      const token = await AsyncStorage.getItem('token');
-      const response = await fetch(
-        'http://10.0.2.2:8080/api/users/me/profile-picture',
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        }
-      );
-
-      if (!response.ok) throw new Error('Upload failed');
-
-      const data = await response.json();
-      setUser(prev => ({ ...prev, profileImageUrl: data.profileImageUrl }));
-      Alert.alert('Success', 'Profile picture updated!');
-    } catch (error) {
-      Alert.alert('Upload Failed', 'Network error');
-    } finally {
-      setUploading(false);
+  try {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission required');
+      return;
     }
-  };
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+
+    if (result.canceled) return;
+
+    setUploading(true);
+
+    const asset = result.assets[0];
+
+    const formData = new FormData();
+
+    formData.append('file', {
+      uri: asset.uri,
+      name: 'profile.jpg',
+      type: 'image/jpeg',
+    });
+
+    const token = await AsyncStorage.getItem('token');
+
+    const response = await fetch(
+      'https://loveecho-1.onrender.com/api/users/me/profile-picture',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      }
+    );
+
+    const data = await response.json();
+    console.log('Upload success:', data);
+
+    setUser(prev => ({
+      ...prev,
+      profileImageUrl: data.profileImageUrl,
+    }));
+
+    Alert.alert('Success', 'Profile picture updated!');
+  } catch (error) {
+    console.log('Upload error:', error);
+    Alert.alert('Upload Failed', error.message);
+  } finally {
+    setUploading(false);
+  }
+};
 
   const handleDeleteProfilePic = () => {
     Alert.alert('Remove photo', 'Are you sure?', [
@@ -174,14 +185,7 @@ export default function ProfileScreen() {
       text: 'Logout',
       style: 'destructive',
       onPress: async () => {
-
-        // 1️⃣ Remove stored data
-        await AsyncStorage.multiRemove(['token', 'username']);
-
-        // 2️⃣ Remove auth header from axios
-        setAuthToken(null);
-
-        // 3️⃣ Navigate
+        await logout();       // ✅ clears token + currentUser
         router.replace('/login');
       },
     },

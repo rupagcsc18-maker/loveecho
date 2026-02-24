@@ -1,4 +1,4 @@
-import React, { useEffect, useState, memo, useRef } from 'react';
+import React, { useState, useRef, memo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -18,7 +18,13 @@ import {
 } from 'react-native';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSequence } from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  withSpring,
+} from 'react-native-reanimated';
 import { storyService } from '../../services/storyService';
 import userApi from '../../services/userApi';
 import HashtagText from '../../components/HashtagText';
@@ -26,203 +32,270 @@ import { useRouter } from 'expo-router';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// --- 🕒 HELPER: TIME FORMAT ---
+// ═══════════════════════════════════════════════════════════
+//  DESIGN TOKENS — Warm Cream Palette (matches app vibe)
+// ═══════════════════════════════════════════════════════════
+const C = {
+  // Backgrounds
+  bg:           '#FFFBF5',   // warm cream (matches app bg)
+  cardBg:       '#FFFFFF',   // pure white cards
+  surfaceWarm:  '#FFF8EE',   // warm tinted surface
+  surfaceMuted: '#F5F0E8',   // muted warm surface
+
+  // Brand
+  navy:         '#1A237E',   // primary navy (matches app)
+  navyLight:    '#283593',   // slightly lighter navy
+  navyMuted:    '#E8EAF6',   // navy tint background
+
+  // Accents
+  green:        '#1B5E20',   // story title green (from original)
+  greenSoft:    '#E8F5E9',   // soft green bg
+  red:          '#E53935',   // heart / like red
+  redSoft:      '#FFEBEE',   // soft red bg
+  amber:        '#F59E0B',   // hashtag amber/gold
+  amberSoft:    '#FFFBEB',   // soft amber bg
+
+  // Text
+  textPrimary:  '#1C2340',   // near-black with navy tint
+  textSecondary:'#455A64',   // standard body text (from original)
+  textMuted:    '#90A4AE',   // muted grey (from original)
+  textLight:    '#B0BEC5',   // very light
+
+  // Borders & Dividers
+  border:       '#EDE8DF',   // warm grey border
+  borderStrong: '#D4CFC7',   // stronger warm border
+
+  white: '#FFFFFF',
+};
+
+// ─── HELPERS ───────────────────────────────────────────────
 const formatTimeAgo = (date) => {
   if (!date) return '';
-  const now = new Date();
-  const diff = Math.floor((now - new Date(date)) / 1000);
+  const diff = Math.floor((Date.now() - new Date(date)) / 1000);
   if (diff < 60) return 'just now';
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 };
 
-// --- 📦 COMPONENT: INDIVIDUAL STORY CARD ---
+// ─── AVATAR COMPONENT ──────────────────────────────────────
+const Avatar = ({ user, anonymous, size = 38, style }) => {
+  const r = size / 2;
+  if (anonymous) {
+    return (
+      <View style={[{ width: size, height: size, borderRadius: r, backgroundColor: C.navyMuted, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#C5CAE9' }, style]}>
+        <Text style={{ fontSize: size * 0.38, color: C.navy }}>✦</Text>
+      </View>
+    );
+  }
+  if (user?.profileImageUrl) {
+    return (
+      <View style={[{ width: size, height: size, borderRadius: r, overflow: 'hidden', borderWidth: 1.5, borderColor: C.navy }, style]}>
+        <Image source={{ uri: user.profileImageUrl }} style={{ width: '100%', height: '100%' }} />
+      </View>
+    );
+  }
+  return (
+    <View style={[{ width: size, height: size, borderRadius: r, backgroundColor: C.navyMuted, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: C.navy }, style]}>
+      <Text style={{ fontSize: size * 0.38, fontWeight: '800', color: C.navy }}>
+        {(user?.username || 'U').charAt(0).toUpperCase()}
+      </Text>
+    </View>
+  );
+};
+
+// ─── STORY CARD ────────────────────────────────────────────
 const StoryItem = memo(({ story, onLike, onOpenComments, onOpenMenu, router }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [loadingMap, setLoadingMap] = useState({});
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
   const galleryRef = useRef(null);
+
   const heartScale = useSharedValue(0);
+  const heartOpacity = useSharedValue(0);
+  const likeScale = useSharedValue(1);
 
   const TEXT_LIMIT = 180;
-  const shouldShowReadMore = story.content && story.content.length > TEXT_LIMIT;
-  const hasImages = story.imageUrls && story.imageUrls.length > 0;
-  const cardContentWidth = SCREEN_WIDTH - 72; // Adjusted for padding/margins
+  const shouldShowReadMore = story.content?.length > TEXT_LIMIT;
+  const hasImages = story.imageUrls?.length > 0;
+  const cardContentWidth = SCREEN_WIDTH - 64; // 16 margin * 2 + 16 padding * 2
 
-  const animatedHeartStyle = useAnimatedStyle(() => ({
+  const animatedHeart = useAnimatedStyle(() => ({
     transform: [{ scale: heartScale.value }],
-    opacity: heartScale.value,
+    opacity: heartOpacity.value,
+  }));
+
+  const animatedLikeBtn = useAnimatedStyle(() => ({
+    transform: [{ scale: likeScale.value }],
   }));
 
   const handlePressLike = () => {
-    heartScale.value = withSequence(
-      withTiming(1, { duration: 300 }),
-      withTiming(0, { duration: 300 })
-    );
+    // Big heart overlay
+    heartScale.value = withSequence(withSpring(1.2, { damping: 8 }), withTiming(0, { duration: 350 }));
+    heartOpacity.value = withSequence(withTiming(1, { duration: 80 }), withTiming(0, { duration: 350 }));
+    // Button bounce
+    likeScale.value = withSequence(withSpring(1.35, { damping: 6 }), withSpring(1, { damping: 10 }));
     onLike(story.id);
   };
 
-  const handleViewStory = () => {
-    router.push(`/story/view/${story.id}`);
-  };
-
   const scrollToImage = (index) => {
-    galleryRef.current?.scrollTo({
-      x: index * cardContentWidth,
-      animated: true,
-    });
+    galleryRef.current?.scrollTo({ x: index * cardContentWidth, animated: true });
     setCurrentImgIndex(index);
   };
 
   return (
-    <View style={styles.storyCard}>
-      <TouchableOpacity activeOpacity={0.9} onPress={handleViewStory}>
-        <Animated.View style={[styles.heartOverlay, animatedHeartStyle]} pointerEvents="none">
-          <FontAwesome name="heart" size={80} color="#E53935" />
-        </Animated.View>
+    <View style={styles.card}>
+      {/* Heart overlay */}
+      <Animated.View style={[styles.heartOverlay, animatedHeart]} pointerEvents="none">
+        <FontAwesome name="heart" size={72} color={C.red} />
+      </Animated.View>
 
-        <View style={styles.userInfoRow}>
-          <View style={[styles.miniAvatar, story.anonymous && styles.anonymousAvatar]}>
-            {story.anonymous ? (
-              <Feather name="user-x" size={14} color="#90A4AE" />
-            ) : story.user?.profileImageUrl ? (
-              <Image source={{ uri: story.user.profileImageUrl }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarLetter}>{(story.user?.username || 'U').charAt(0).toUpperCase()}</Text>
-            )}
-          </View>
-          <View>
-            <Text style={styles.usernameText}>
+      <TouchableOpacity activeOpacity={0.88} onPress={() => router.push(`/story/view/${story.id}`)}>
+        {/* ── User Row ── */}
+        <View style={styles.userRow}>
+          <Avatar user={story.user} anonymous={story.anonymous} size={38} />
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={styles.username}>
               {story.anonymous ? 'Anonymous Soul' : (story.user?.username || 'Unknown')}
             </Text>
-            <Text style={styles.timestampMini}>{formatTimeAgo(story.createdAt)}</Text>
+            <Text style={styles.timestamp}>{formatTimeAgo(story.createdAt)}</Text>
           </View>
-        </View>
-
-        <View style={styles.cardHeader}>
-          <Text style={styles.storyTitle}>{story.title}</Text>
-          <TouchableOpacity 
-            onPress={(e) => {
-              e.stopPropagation(); 
-              onOpenMenu(story);
-            }}
+          {/* Tag pill showing post type */}
+          {story.anonymous && (
+            <View style={styles.anonPill}>
+              <Text style={styles.anonPillText}>anon</Text>
+            </View>
+          )}
+          <TouchableOpacity
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={styles.moreBtn}
+            onPress={(e) => { e.stopPropagation(); onOpenMenu(story); }}
           >
-            <Feather name="more-horizontal" size={20} color="#B0BEC5" />
+            <Feather name="more-horizontal" size={20} color={C.textLight} />
           </TouchableOpacity>
         </View>
 
-        <View>
-          <HashtagText
-            text={isExpanded || !shouldShowReadMore 
-              ? story.content 
-              : `${story.content.slice(0, TEXT_LIMIT)}...`}
-            style={styles.contentBody}
-            onPressHashtag={(tag) => router.push(`/hashtag/${tag}`)}
-          />
-          
-          {shouldShowReadMore && (
-            <TouchableOpacity 
-              onPress={(e) => {
-                e.stopPropagation(); 
-                setIsExpanded(!isExpanded);
-              }}
-              style={styles.readMoreButton}
-            >
-              <Text style={styles.readMoreText}>
-                {isExpanded ? 'Show less' : 'See more'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        {/* ── Title ── */}
+        <Text style={styles.title}>{story.title}</Text>
 
-        {/* 🖼️ IMAGE GALLERY SECTION WITH ARROWS */}
+        {/* ── Body Text ── */}
+        <HashtagText
+          text={isExpanded || !shouldShowReadMore
+            ? story.content
+            : `${story.content?.slice(0, TEXT_LIMIT)}...`}
+          style={styles.body}
+          hashtagStyle={styles.hashtag}
+          onPressHashtag={(tag) => router.push(`/hashtag/${tag}`)}
+        />
+        {shouldShowReadMore && (
+          <TouchableOpacity onPress={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}>
+            <Text style={styles.readMore}>{isExpanded ? '↑ Show less' : '↓ Read more'}</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* ── Image Gallery ── */}
         {hasImages && (
-          <View style={styles.imageGalleryContainer}>
-            <ScrollView 
+          <View style={styles.gallery}>
+            <ScrollView
               ref={galleryRef}
-              horizontal 
-              pagingEnabled 
+              horizontal
+              pagingEnabled
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={(e) => {
-                const newIndex = Math.round(e.nativeEvent.contentOffset.x / cardContentWidth);
-                setCurrentImgIndex(newIndex);
-                e.stopPropagation();
-              }} 
+                const idx = Math.round(e.nativeEvent.contentOffset.x / cardContentWidth);
+                setCurrentImgIndex(idx);
+              }}
             >
-              {story.imageUrls.map((url, index) => (
-                <View key={index} style={styles.imageWrapper}>
-                  {loadingMap[index] !== false && (
-                    <ActivityIndicator 
-                      style={StyleSheet.absoluteFill} 
-                      color="#1A237E" 
-                    />
+              {story.imageUrls.map((url, i) => (
+                <View key={i} style={[styles.imgWrapper, { width: cardContentWidth }]}>
+                  {loadingMap[i] !== false && (
+                    <ActivityIndicator style={StyleSheet.absoluteFill} color={C.navy} />
                   )}
-                  <Image 
-                    source={{ uri: url }} 
-                    style={styles.storyImage} 
-                    resizeMode="cover" 
-                    onLoad={() => setLoadingMap(prev => ({ ...prev, [index]: false }))}
-                    onError={() => setLoadingMap(prev => ({ ...prev, [index]: false }))}
+                  <Image
+                    source={{ uri: url }}
+                    style={styles.storyImg}
+                    resizeMode="cover"
+                    onLoad={() => setLoadingMap(p => ({ ...p, [i]: false }))}
+                    onError={() => setLoadingMap(p => ({ ...p, [i]: false }))}
                   />
                 </View>
               ))}
             </ScrollView>
 
-            {/* Left Arrow Navigation */}
+            {/* Arrow nav */}
             {currentImgIndex > 0 && (
-              <TouchableOpacity 
-                style={[styles.galleryArrow, styles.arrowLeft]}
-                onPress={() => scrollToImage(currentImgIndex - 1)}
-              >
-                <Feather name="chevron-left" size={20} color="#FFF" />
+              <TouchableOpacity style={[styles.arrow, styles.arrowLeft]} onPress={() => scrollToImage(currentImgIndex - 1)}>
+                <Feather name="chevron-left" size={16} color={C.white} />
               </TouchableOpacity>
             )}
-
-            {/* Right Arrow Navigation */}
             {currentImgIndex < story.imageUrls.length - 1 && (
-              <TouchableOpacity 
-                style={[styles.galleryArrow, styles.arrowRight]}
-                onPress={() => scrollToImage(currentImgIndex + 1)}
-              >
-                <Feather name="chevron-right" size={20} color="#FFF" />
+              <TouchableOpacity style={[styles.arrow, styles.arrowRight]} onPress={() => scrollToImage(currentImgIndex + 1)}>
+                <Feather name="chevron-right" size={16} color={C.white} />
               </TouchableOpacity>
             )}
 
+            {/* Dot indicators */}
             {story.imageUrls.length > 1 && (
-              <View style={styles.imageBadge}>
-                <Text style={styles.imageBadgeText}>{currentImgIndex + 1}/{story.imageUrls.length}</Text>
+              <View style={styles.dots}>
+                {story.imageUrls.map((_, i) => (
+                  <View key={i} style={[styles.dot, i === currentImgIndex && styles.dotActive]} />
+                ))}
               </View>
             )}
           </View>
         )}
       </TouchableOpacity>
 
+      {/* ── Divider ── */}
+      <View style={styles.divider} />
+
+      {/* ── Action Row ── */}
       <View style={styles.actionRow}>
-        <TouchableOpacity style={styles.iconButton} onPress={handlePressLike}>
-          <FontAwesome 
-            name={story.hasReacted ? "heart" : "heart-o"} 
-            size={22} 
-            color={story.hasReacted ? "#E53935" : "#455A64"} 
-          />
-          <Text style={[styles.actionCount, story.hasReacted && { color: "#E53935" }]}>
-            {story.reactionsCount || 0}
-          </Text>
+        {/* Like */}
+        <Animated.View style={animatedLikeBtn}>
+          <TouchableOpacity style={styles.actionBtn} onPress={handlePressLike} activeOpacity={0.7}>
+            <View style={[styles.actionIconWrap, story.hasReacted && styles.actionIconWrapActive]}>
+              <FontAwesome
+                name={story.hasReacted ? 'heart' : 'heart-o'}
+                size={17}
+                color={story.hasReacted ? C.red : C.textSecondary}
+              />
+            </View>
+            <Text style={[styles.actionLabel, story.hasReacted && { color: C.red, fontWeight: '700' }]}>
+              {story.reactionsCount || 0}
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* Comment */}
+        <TouchableOpacity style={styles.actionBtn} onPress={() => onOpenComments(story.id)} activeOpacity={0.7}>
+          <View style={styles.actionIconWrap}>
+            <Feather name="message-circle" size={17} color={C.textSecondary} />
+          </View>
+          <Text style={styles.actionLabel}>{story.comments?.length || 0}</Text>
         </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.iconButton} onPress={() => onOpenComments(story.id)}>
-          <Feather name="message-circle" size={22} color="#455A64" />
-          <Text style={styles.actionCount}>{story.comments?.length || 0}</Text>
-        </TouchableOpacity>
+
+        <View style={{ flex: 1 }} />
+
+        {/* Timestamp on right */}
+        <Text style={styles.cardTimestamp}>{formatTimeAgo(story.createdAt)}</Text>
       </View>
     </View>
   );
 });
 
-// --- 📱 MAIN SCREEN ---
+// ─── EMPTY STATE ───────────────────────────────────────────
+const EmptyState = () => (
+  <View style={styles.emptyWrap}>
+    <Text style={styles.emptyIcon}>📭</Text>
+    <Text style={styles.emptyTitle}>No echoes yet</Text>
+    <Text style={styles.emptyBody}>Be the first to share something unsaid.</Text>
+  </View>
+);
+
+// ─── MAIN SCREEN ───────────────────────────────────────────
 export default function ExploreScreen() {
   const router = useRouter();
-
   const [stories, setStories] = useState([]);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -232,6 +305,7 @@ export default function ExploreScreen() {
   const PAGE_SIZE = 10;
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuTargetStory, setMenuTargetStory] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
@@ -240,38 +314,41 @@ export default function ExploreScreen() {
   const [activeComments, setActiveComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [filterVisible, setFilterVisible] = useState(false);
+  const [activeSort, setActiveSort] = useState('Recent');
+  const [activeCategory, setActiveCategory] = useState(null);
 
-  useEffect(() => { init(); }, []);
+  const SORT_OPTIONS = ['Recent', 'Trending', 'Following'];
+  const CATEGORY_OPTIONS = [
+    { label: 'Healing', emoji: '🌿' },
+    { label: 'Love', emoji: '❤️' },
+    { label: 'Heartbreak', emoji: '💔' },
+    { label: 'Motivation', emoji: '⚡' },
+    { label: 'Life', emoji: '🌀' },
+    { label: 'Hope', emoji: '🌅' },
+    { label: 'Anger', emoji: '🔥' },
+    { label: 'Joy', emoji: '✨' },
+  ];
+
+  React.useEffect(() => { init(); }, []);
 
   const init = async () => {
     try {
       const res = await userApi.getCurrentUser();
       setCurrentUser(res.data);
-    } catch (e) {
-      console.log('User not logged in');
-    } finally {
-      loadStories(0);
-    }
+    } catch (e) {}
+    finally { loadStories(0); }
   };
 
   const loadStories = async (pageToLoad = 0, query = searchQuery) => {
     if (loading || loadingMore || (!hasMore && pageToLoad !== 0)) return;
-    
-    if (pageToLoad === 0) {
-        setRefreshing(true);
-    } else {
-        setLoadingMore(true);
-    }
-
+    pageToLoad === 0 ? setRefreshing(true) : setLoadingMore(true);
     try {
-      let res;
-      if (query.trim().length > 0) {
-        res = await storyService.searchStories(query, pageToLoad, PAGE_SIZE);
-      } else {
-        res = await storyService.getStories(pageToLoad, PAGE_SIZE);
-      }
+      const res = query.trim().length > 0
+        ? await storyService.searchStories(query, pageToLoad, PAGE_SIZE)
+        : await storyService.getStories(pageToLoad, PAGE_SIZE);
       const data = res.data.content || [];
-      setStories(prev => (pageToLoad === 0 ? data : [...prev, ...data]));
+      setStories(prev => pageToLoad === 0 ? data : [...prev, ...data]);
       setHasMore(!res.data.last);
       setPage(pageToLoad);
     } catch (e) {
@@ -283,44 +360,25 @@ export default function ExploreScreen() {
     }
   };
 
-  const onRefresh = () => {
-    loadStories(0);
-  };
-
   const handleLike = async (storyId) => {
-    if (!currentUser) {
-      Alert.alert('Login required', 'Please login to like ❤️');
-      return;
-    }
-    setStories(prev => prev.map(s => {
-      if (s.id === storyId) {
-        const isCurrentlyLiked = s.hasReacted;
-        return {
-          ...s,
-          hasReacted: !isCurrentlyLiked,
-          reactionsCount: isCurrentlyLiked ? (s.reactionsCount - 1) : (s.reactionsCount + 1)
-        };
-      }
-      return s;
-    }));
-
-    try {
-      await storyService.reactToStory(storyId, 'LIKE');
-    } catch (e) {
-      loadStories(page);
-    }
+    if (!currentUser) { Alert.alert('Login required', 'Please sign in to like ❤️'); return; }
+    setStories(prev => prev.map(s =>
+      s.id === storyId
+        ? { ...s, hasReacted: !s.hasReacted, reactionsCount: s.hasReacted ? s.reactionsCount - 1 : s.reactionsCount + 1 }
+        : s
+    ));
+    try { await storyService.reactToStory(storyId, 'LIKE'); }
+    catch (e) { loadStories(page); }
   };
 
   const handleBookmark = async () => {
     if (!currentUser || !menuTargetStory) return;
-    const isCurrentlyBookmarked = menuTargetStory.isBookmarked;
+    const was = menuTargetStory.isBookmarked;
     try {
       await storyService.toggleBookmark(menuTargetStory.id);
-      setStories(prev => prev.map(s => s.id === menuTargetStory.id ? { ...s, isBookmarked: !isCurrentlyBookmarked } : s));
+      setStories(prev => prev.map(s => s.id === menuTargetStory.id ? { ...s, isBookmarked: !was } : s));
       setMenuVisible(false);
-    } catch (e) {
-      Alert.alert('Error', 'Could not update bookmark.');
-    }
+    } catch (e) { Alert.alert('Error', 'Could not update bookmark.'); }
   };
 
   const openCommentsSheet = async (storyId) => {
@@ -330,239 +388,554 @@ export default function ExploreScreen() {
     try {
       const res = await storyService.getComments(storyId, 0, 20);
       setActiveComments(res.data?.content || []);
-    } catch (e) {
-      console.error('Failed to load comments', e);
-    }
+    } catch (e) {}
   };
 
   const submitComment = async () => {
     if (!commentText.trim() || !currentUser) return;
+    setSubmitting(true);
     try {
-      setSubmitting(true);
       const res = await storyService.addComment(selectedStoryId, commentText);
-      const newComment = { 
+      const c = {
         id: res.data?.id || Date.now().toString(),
-        userId: currentUser.username, 
-        text: commentText, 
-        createdAt: new Date().toISOString(), 
+        userId: currentUser.username,
+        text: commentText,
+        createdAt: new Date().toISOString(),
         username: currentUser.username,
-        profileImageUrl: currentUser.profileImageUrl
+        profileImageUrl: currentUser.profileImageUrl,
       };
-      setActiveComments(prev => [...prev, newComment]);
-      setStories(prev => prev.map(s => s.id === selectedStoryId ? { ...s, comments: [...(s.comments || []), newComment] } : s));
+      setActiveComments(prev => [...prev, c]);
+      setStories(prev => prev.map(s =>
+        s.id === selectedStoryId ? { ...s, comments: [...(s.comments || []), c] } : s
+      ));
       setCommentText('');
       Keyboard.dismiss();
-    } catch (e) { 
-      Alert.alert('Error', 'Unable to add comment'); 
-    } finally { 
-      setSubmitting(false); 
-    }
+    } catch (e) {
+      Alert.alert('Error', 'Unable to post comment');
+    } finally { setSubmitting(false); }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.searchHeader}>
-        <Text style={styles.headerTitleMini}>Unsaid</Text>
-        <View style={styles.searchBarContainer}>
-          <Feather name="search" size={18} color="#90A4AE" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search echoes..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={() => loadStories(0)}
-            returnKeyType="search"
-            placeholderTextColor="#90A4AE"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => { setSearchQuery(''); loadStories(0, ''); }}>
-              <Feather name="x" size={18} color="#90A4AE" />
-            </TouchableOpacity>
-          )}
+
+      {/* ══ HEADER ══════════════════════════════════════════ */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.screenTitle}>Unsaid</Text>
+          <Text style={styles.screenSub}>what's echoing today?</Text>
         </View>
+        <TouchableOpacity style={[styles.filterBtn, (activeSort !== 'Recent' || activeCategory) && styles.filterBtnActive]} onPress={() => setFilterVisible(true)}>
+          <Feather name="sliders" size={18} color={(activeSort !== 'Recent' || activeCategory) ? C.white : C.navy} />
+          {(activeSort !== 'Recent' || activeCategory) && <View style={styles.filterDot} />}
+        </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
+      {/* ══ SEARCH ══════════════════════════════════════════ */}
+      <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+        <Feather name="search" size={17} color={searchFocused ? C.navy : C.textMuted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search echoes..."
+          placeholderTextColor={C.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
+          onSubmitEditing={() => loadStories(0)}
+          returnKeyType="search"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => { setSearchQuery(''); loadStories(0, ''); }}>
+            <View style={styles.clearBtn}>
+              <Feather name="x" size={12} color={C.white} />
+            </View>
+          </TouchableOpacity>
+        )}
+      </View>
+
+
+
+      {/* ══ FEED ════════════════════════════════════════════ */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 40, paddingTop: 4 }}
         onScroll={({ nativeEvent }) => {
-          const isCloseToBottom = nativeEvent.layoutMeasurement.height + nativeEvent.contentOffset.y >= nativeEvent.contentSize.height - 100;
-          if (isCloseToBottom && hasMore && !loadingMore) loadStories(page + 1);
+          const near = nativeEvent.layoutMeasurement.height + nativeEvent.contentOffset.y >= nativeEvent.contentSize.height - 120;
+          if (near && hasMore && !loadingMore) loadStories(page + 1);
         }}
         scrollEventThrottle={16}
         refreshControl={
-            <RefreshControl 
-                refreshing={refreshing} 
-                onRefresh={onRefresh} 
-                tintColor="#1A237E" 
-                colors={["#1A237E"]}
-            />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadStories(0)}
+            tintColor={C.navy}
+            colors={[C.navy]}
+          />
         }
       >
         {loading && page === 0 ? (
-          <ActivityIndicator size="large" color="#1A237E" style={{ marginTop: 50 }} />
+          <ActivityIndicator size="large" color={C.navy} style={{ marginTop: 60 }} />
+        ) : stories.length === 0 ? (
+          <EmptyState />
         ) : (
           <>
-            {stories.map(story => (
-              <StoryItem 
-                key={story.id} 
-                story={story} 
-                onLike={handleLike} 
+            {stories.map(s => (
+              <StoryItem
+                key={s.id}
+                story={s}
+                onLike={handleLike}
                 onOpenComments={openCommentsSheet}
-                onOpenMenu={(s) => { setMenuTargetStory(s); setMenuVisible(true); }}
+                onOpenMenu={(st) => { setMenuTargetStory(st); setMenuVisible(true); }}
                 router={router}
               />
             ))}
-            {loadingMore && <ActivityIndicator size="small" color="#1A237E" style={{ margin: 20 }} />}
-            {!hasMore && stories.length > 0 && <Text style={styles.endText}>No more stories to echo.</Text>}
+            {loadingMore && <ActivityIndicator size="small" color={C.navy} style={{ margin: 20 }} />}
+            {!hasMore && stories.length > 0 && (
+              <View style={styles.endWrap}>
+                <View style={styles.endLine} />
+                <Text style={styles.endText}>all caught up</Text>
+                <View style={styles.endLine} />
+              </View>
+            )}
           </>
         )}
       </ScrollView>
 
-      {/* Menu Modal */}
+      {/* ══ MENU MODAL ══════════════════════════════════════ */}
       <Modal visible={menuVisible} transparent animationType="fade">
         <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={() => setMenuVisible(false)}>
-          <View style={styles.menuContainer}>
-            <TouchableOpacity style={styles.menuItem} onPress={handleBookmark}>
-                <FontAwesome name={menuTargetStory?.isBookmarked ? "bookmark" : "bookmark-o"} size={18} color="#263238" />
-                <Text style={styles.menuText}>{menuTargetStory?.isBookmarked ? 'Unbookmark' : 'Bookmark'}</Text>
+          <View style={styles.menuCard}>
+            <View style={styles.menuHandle} />
+            <TouchableOpacity style={styles.menuRow} onPress={handleBookmark}>
+              <View style={[styles.menuIconCircle, { backgroundColor: C.navyMuted }]}>
+                <FontAwesome name={menuTargetStory?.isBookmarked ? 'bookmark' : 'bookmark-o'} size={14} color={C.navy} />
+              </View>
+              <Text style={styles.menuLabel}>{menuTargetStory?.isBookmarked ? 'Remove bookmark' : 'Save story'}</Text>
+              <Feather name="chevron-right" size={14} color={C.textLight} style={{ marginLeft: 'auto' }} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); Alert.alert('Reported'); }}>
-                <Feather name="flag" size={18} color="#E53935" /><Text style={[styles.menuText, { color: '#E53935' }]}>Report</Text>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuRow} onPress={() => { setMenuVisible(false); Alert.alert('Reported', 'Thanks for keeping Unsaid safe.'); }}>
+              <View style={[styles.menuIconCircle, { backgroundColor: C.redSoft }]}>
+                <Feather name="flag" size={14} color={C.red} />
+              </View>
+              <Text style={[styles.menuLabel, { color: C.red }]}>Report</Text>
+              <Feather name="chevron-right" size={14} color={C.textLight} style={{ marginLeft: 'auto' }} />
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
 
-      {/* Comments Modal */}
+      {/* ══ COMMENTS SHEET ══════════════════════════════════ */}
       <Modal visible={viewAllModalVisible} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
+        <View style={styles.sheetBackdrop}>
           <TouchableOpacity style={{ flex: 1 }} onPress={() => setViewAllModalVisible(false)} />
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 25}
-            style={styles.sheetContainer}
+            style={styles.sheet}
           >
             <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Comments</Text>
-            <ScrollView keyboardShouldPersistTaps="handled">
+
+            {/* Sheet header */}
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>💬 Echoes</Text>
+              <TouchableOpacity onPress={() => setViewAllModalVisible(false)} style={styles.sheetClose}>
+                <Feather name="x" size={16} color={C.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {activeComments.length === 0 && (
+                <View style={styles.emptyComments}>
+                  <Text style={{ fontSize: 28 }}>🌿</Text>
+                  <Text style={styles.emptyCommentsText}>No echoes yet — add yours</Text>
+                </View>
+              )}
               {activeComments.map((c, i) => (
-                <View key={c.id || i} style={styles.fullCommentItem}>
-                  <View style={styles.avatarPlaceholder}>
-                    {c.profileImageUrl ? (
-                      <Image source={{ uri: c.profileImageUrl }} style={styles.avatarImage} />
-                    ) : (
-                      <Text style={styles.avatarLetter}>{(c.username || 'U').charAt(0).toUpperCase()}</Text>
-                    )}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text style={styles.boldUser}>{c.username || 'User'} <Text style={styles.timestampMini}>{formatTimeAgo(c.createdAt)}</Text></Text>
+                <View key={c.id || i} style={styles.commentItem}>
+                  <Avatar user={{ username: c.username, profileImageUrl: c.profileImageUrl }} size={34} />
+                  <View style={[styles.commentBubble, { marginLeft: 10 }]}>
+                    <View style={styles.commentMeta}>
+                      <Text style={styles.commentUser}>{c.username || 'User'}</Text>
+                      <Text style={styles.commentTime}>{formatTimeAgo(c.createdAt)}</Text>
                     </View>
-                    <Text style={styles.commentBodyText}>{c.text || c.content}</Text>
+                    <Text style={styles.commentText}>{c.text || c.content}</Text>
                   </View>
                 </View>
               ))}
+              <View style={{ height: 16 }} />
             </ScrollView>
-            <View style={styles.sheetInputArea}>
-              <View style={styles.tinyAvatar}>
-                {currentUser?.profileImageUrl ? (
-                   <Image source={{ uri: currentUser.profileImageUrl }} style={styles.avatarImage} />
-                ) : (
-                   <Text style={[styles.avatarLetter, { fontSize: 10 }]}>{(currentUser?.username || 'U').charAt(0).toUpperCase()}</Text>
-                )}
-              </View>
-              <TextInput 
-                style={styles.textInput} 
-                placeholder="Add an echo..." 
-                value={commentText} 
-                onChangeText={setCommentText} 
+
+            {/* Comment input */}
+            <View style={styles.inputRow}>
+              <Avatar
+                user={{ username: currentUser?.username, profileImageUrl: currentUser?.profileImageUrl }}
+                size={30}
               />
-              <TouchableOpacity onPress={submitComment}><Text style={styles.postLabel}>Post</Text></TouchableOpacity>
+              <View style={styles.inputWrap}>
+                <TextInput
+                  style={styles.commentInput}
+                  placeholder="Add an echo..."
+                  placeholderTextColor={C.textMuted}
+                  value={commentText}
+                  onChangeText={setCommentText}
+                />
+                <TouchableOpacity
+                  onPress={submitComment}
+                  disabled={submitting || !commentText.trim()}
+                  style={[styles.sendBtn, (!commentText.trim()) && { opacity: 0.4 }]}
+                >
+                  {submitting
+                    ? <ActivityIndicator size="small" color={C.white} />
+                    : <Feather name="send" size={14} color={C.white} />
+                  }
+                </TouchableOpacity>
+              </View>
             </View>
           </KeyboardAvoidingView>
+        </View>
+      </Modal>
+      {/* ══ FILTER PANEL ════════════════════════════════════ */}
+      <Modal visible={filterVisible} animationType="slide" transparent>
+        <View style={styles.sheetBackdrop}>
+          <TouchableOpacity style={{ flex: 1 }} onPress={() => setFilterVisible(false)} />
+          <View style={[styles.sheet, { height: 'auto', paddingBottom: Platform.OS === 'ios' ? 32 : 24 }]}>
+            <View style={styles.sheetHandle} />
+
+            {/* Header */}
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>🎛️ Filter & Sort</Text>
+              <TouchableOpacity
+                onPress={() => { setActiveSort('Recent'); setActiveCategory(null); }}
+                style={styles.resetBtn}
+              >
+                <Text style={styles.resetBtnText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Sort section */}
+            <Text style={styles.filterSectionLabel}>Sort by</Text>
+            <View style={styles.filterChipRow}>
+              {SORT_OPTIONS.map(opt => (
+                <TouchableOpacity
+                  key={opt}
+                  style={[styles.filterChip, activeSort === opt && styles.filterChipActive]}
+                  onPress={() => setActiveSort(opt)}
+                >
+                  <Text style={[styles.filterChipText, activeSort === opt && styles.filterChipTextActive]}>
+                    {opt}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Category section */}
+            <Text style={[styles.filterSectionLabel, { marginTop: 20 }]}>Category</Text>
+            <View style={styles.filterCategoryGrid}>
+              {CATEGORY_OPTIONS.map(opt => (
+                <TouchableOpacity
+                  key={opt.label}
+                  style={[styles.filterCategoryChip, activeCategory === opt.label && styles.filterChipActive]}
+                  onPress={() => setActiveCategory(activeCategory === opt.label ? null : opt.label)}
+                >
+                  <Text style={styles.filterCategoryEmoji}>{opt.emoji}</Text>
+                  <Text style={[styles.filterChipText, activeCategory === opt.label && styles.filterChipTextActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Apply button */}
+            <TouchableOpacity
+              style={styles.applyBtn}
+              onPress={() => { setFilterVisible(false); loadStories(0); }}
+            >
+              <Text style={styles.applyBtnText}>Apply Filters</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     </SafeAreaView>
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+//  STYLES
+// ═══════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFBF5' },
-  searchHeader: { paddingHorizontal: 20, paddingBottom: 15, paddingTop: 10 },
-  headerTitleMini: { fontSize: 24, fontWeight: '800', color: '#1A237E', marginBottom: 10 },
-  searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 15, paddingHorizontal: 12, height: 45, elevation: 2 },
-  searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 16 },
-  storyCard: { backgroundColor: '#FFFFFF', marginHorizontal: 16, marginVertical: 10, padding: 20, borderRadius: 24, elevation: 3, position: 'relative', overflow: 'hidden' },
-  userInfoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
-  miniAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E8EAF6', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#C5CAE9', overflow: 'hidden' },
-  avatarImage: { width: '100%', height: '100%' },
-  avatarLetter: { fontSize: 14, fontWeight: '800', color: '#1A237E' },
-  anonymousAvatar: { backgroundColor: '#ECEFF1', borderColor: '#CFD8DC' },
-  usernameText: { fontSize: 14, fontWeight: '700', color: '#263238' },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-  storyTitle: { fontSize: 20, fontWeight: '700', color: '#1B5E20', flex: 1 },
-  contentBody: { fontSize: 16, color: '#37474F', lineHeight: 24, marginBottom: 10 },
-  readMoreButton: { marginTop: 4, marginBottom: 15 },
-  readMoreText: { color: '#1E88E5', fontWeight: '700', fontSize: 14 },
-  
-  imageGalleryContainer: { 
-    marginTop: 5, 
-    borderRadius: 16, 
-    overflow: 'hidden', 
-    backgroundColor: '#F0F0F0', 
-    marginBottom: 15,
-    position: 'relative' // Critical for arrow positioning
+
+  // ── Layout
+  container:    { flex: 1, backgroundColor: C.bg },
+
+  // ── Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
   },
-  imageWrapper: { 
-    width: SCREEN_WIDTH - 72, 
-    height: 300, 
-    position: 'relative', 
-    justifyContent: 'center', 
+  screenTitle:  { fontSize: 28, fontWeight: '900', color: C.navy, letterSpacing: -0.5 },
+  screenSub:    { fontSize: 12, color: C.textMuted, marginTop: 1, fontStyle: 'italic' },
+  filterBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: C.navyMuted,
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#E0E0E0'
-  }, 
-  storyImage: { 
-    width: '100%', 
-    height: '100%',
-    position: 'absolute' 
+    borderWidth: 1,
+    borderColor: '#C5CAE9',
   },
-  
-  // 🏹 ARROW STYLES
-  galleryArrow: {
+  filterBtnActive: { backgroundColor: C.navy, borderColor: C.navy },
+  filterDot: {
     position: 'absolute',
-    top: '45%',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    top: 7, right: 7, width: 7, height: 7,
+    borderRadius: 4, backgroundColor: C.amber,
+    borderWidth: 1.5, borderColor: C.bg,
+  },
+
+  // ── Filter panel
+  filterSectionLabel: {
+    fontSize: 12, fontWeight: '700', color: C.textMuted,
+    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10,
+  },
+  filterChipRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterCategoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterChip: {
+    paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20,
+    backgroundColor: C.surfaceMuted, borderWidth: 1.5, borderColor: C.border,
+  },
+  filterCategoryChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20,
+    backgroundColor: C.surfaceMuted, borderWidth: 1.5, borderColor: C.border,
+  },
+  filterCategoryEmoji: { fontSize: 14 },
+  filterChipActive:    { backgroundColor: C.navy, borderColor: C.navy },
+  filterChipText:      { fontSize: 13, fontWeight: '600', color: C.textSecondary },
+  filterChipTextActive:{ color: C.white },
+  applyBtn: {
+    marginTop: 24, backgroundColor: C.navy,
+    borderRadius: 16, paddingVertical: 15, alignItems: 'center',
+  },
+  applyBtnText: { fontSize: 15, fontWeight: '800', color: C.white, letterSpacing: 0.3 },
+
+  // ── Search
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: C.white,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    height: 48,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    gap: 10,
+    // shadow
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  searchBarFocused: {
+    borderColor: C.navy,
+    shadowOpacity: 0.08,
+  },
+  searchInput:  { flex: 1, fontSize: 15, color: C.textPrimary },
+  clearBtn: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: C.textMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // ── Card
+  card: {
+    backgroundColor: C.cardBg,
+    marginHorizontal: 16,
+    marginVertical: 7,
+    padding: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: 'hidden',
+    shadowColor: '#1A237E',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+
+  // ── User row
+  userRow:      { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  username:     { fontSize: 14, fontWeight: '700', color: C.textPrimary },
+  timestamp:    { fontSize: 11, color: C.textMuted, marginTop: 1 },
+  anonPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: C.navyMuted,
+    marginRight: 8,
+  },
+  anonPillText: { fontSize: 10, fontWeight: '700', color: C.navy, textTransform: 'uppercase', letterSpacing: 0.5 },
+  moreBtn:      { padding: 4 },
+
+  // ── Content
+  title: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: C.green,
+    marginBottom: 8,
+    letterSpacing: -0.2,
+    lineHeight: 26,
+  },
+  body: {
+    fontSize: 15,
+    color: C.textSecondary,
+    lineHeight: 23,
+    marginBottom: 8,
+  },
+  hashtag:      { color: C.amber, fontWeight: '700' },
+  readMore:     { color: C.navy, fontSize: 13, fontWeight: '700', marginTop: 2, marginBottom: 10 },
+
+  // ── Gallery
+  gallery: {
+    marginTop: 8,
+    marginBottom: 14,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: C.surfaceMuted,
+    position: 'relative',
+  },
+  imgWrapper:   { height: 260, position: 'relative', justifyContent: 'center', alignItems: 'center', backgroundColor: C.surfaceMuted },
+  storyImg:     { position: 'absolute', width: '100%', height: '100%' },
+  arrow: {
+    position: 'absolute',
+    top: '42%',
+    backgroundColor: 'rgba(26,35,126,0.6)',
     padding: 8,
     borderRadius: 20,
     zIndex: 10,
   },
-  arrowLeft: { left: 10 },
-  arrowRight: { right: 10 },
+  arrowLeft:    { left: 10 },
+  arrowRight:   { right: 10 },
+  dots:         { position: 'absolute', bottom: 10, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 5 },
+  dot:          { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.5)' },
+  dotActive:    { backgroundColor: C.white, width: 14 },
 
-  imageBadge: { position: 'absolute', top: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  imageBadgeText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
+  // ── Divider
+  divider:      { height: 1, backgroundColor: C.border, marginTop: 4, marginBottom: 12 },
 
-  actionRow: { flexDirection: 'row', gap: 24, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F5F5F5', paddingTop: 12 },
-  iconButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  actionCount: { fontSize: 14, fontWeight: '600', color: '#607D8B' },
-  heartOverlay: { position: 'absolute', top: '25%', left: '35%', zIndex: 99, alignSelf: 'center' },
-  boldUser: { fontWeight: '700', color: '#263238' },
-  timestampMini: { fontSize: 11, color: '#B0BEC5' },
-  menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.1)', justifyContent: 'center', alignItems: 'center' },
-  menuContainer: { backgroundColor: '#FFF', borderRadius: 15, width: 180, padding: 5, elevation: 10 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10 },
-  menuText: { fontSize: 15, fontWeight: '600' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheetContainer: { backgroundColor: '#FFF', borderTopLeftRadius: 32, borderTopRightRadius: 32, height: SCREEN_HEIGHT * 0.8, padding: 24 },
-  sheetHandle: { width: 40, height: 4, backgroundColor: '#E0E0E0', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
-  sheetTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center', marginBottom: 20 },
-  fullCommentItem: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  avatarPlaceholder: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F5F5F5', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
-  tinyAvatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F5F5F5', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
-  commentBodyText: { color: '#455A64', fontSize: 14 },
-  sheetInputArea: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingTop: 15 },
-  textInput: { flex: 1, backgroundColor: '#F8F9FB', borderRadius: 25, paddingHorizontal: 16, height: 45 },
-  postLabel: { color: '#1E88E5', fontWeight: '800' },
-  endText: { textAlign: 'center', color: '#B0BEC5', marginVertical: 20, fontSize: 12 }
+  // ── Actions
+  actionRow:    { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  actionBtn:    { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  actionIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: C.surfaceMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionIconWrapActive: { backgroundColor: C.redSoft },
+  actionLabel:  { fontSize: 14, color: C.textSecondary, fontWeight: '600' },
+  cardTimestamp:{ fontSize: 11, color: C.textLight, fontStyle: 'italic' },
+
+  // ── Heart overlay
+  heartOverlay: { position: 'absolute', top: '22%', left: '34%', zIndex: 99 },
+
+  // ── Empty state
+  emptyWrap:    { alignItems: 'center', paddingTop: 80, paddingHorizontal: 40 },
+  emptyIcon:    { fontSize: 48, marginBottom: 16 },
+  emptyTitle:   { fontSize: 20, fontWeight: '800', color: C.textPrimary, marginBottom: 8 },
+  emptyBody:    { fontSize: 14, color: C.textMuted, textAlign: 'center', lineHeight: 22 },
+
+  // ── End of feed
+  endWrap:      { flexDirection: 'row', alignItems: 'center', marginVertical: 28, paddingHorizontal: 24, gap: 12 },
+  endLine:      { flex: 1, height: 1, backgroundColor: C.border },
+  endText:      { fontSize: 11, color: C.textLight, fontStyle: 'italic', letterSpacing: 0.5 },
+
+  // ── Menu modal
+  menuBackdrop: { flex: 1, backgroundColor: 'rgba(26,35,126,0.12)', justifyContent: 'center', alignItems: 'center' },
+  menuCard: {
+    backgroundColor: C.white,
+    borderRadius: 20,
+    width: 240,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: C.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+  menuHandle:   { width: 32, height: 3, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginBottom: 8 },
+  menuRow:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 16, gap: 12 },
+  menuIconCircle: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  menuLabel:    { fontSize: 14, fontWeight: '600', color: C.textPrimary, flex: 1 },
+  menuDivider:  { height: 1, backgroundColor: C.border, marginHorizontal: 16 },
+
+  // ── Comments sheet
+  sheetBackdrop:{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: C.bg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    height: SCREEN_HEIGHT * 0.8,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderColor: C.border,
+  },
+  sheetHandle:  { width: 36, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  sheetHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  sheetTitle:   { fontSize: 17, fontWeight: '800', color: C.textPrimary },
+  sheetClose: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: C.surfaceMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyComments:{ alignItems: 'center', paddingVertical: 40, gap: 10 },
+  emptyCommentsText: { fontSize: 14, color: C.textMuted },
+
+  // Comment item
+  commentItem:  { flexDirection: 'row', marginBottom: 16 },
+  commentBubble:{ flex: 1, backgroundColor: C.white, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.border },
+  commentMeta:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  commentUser:  { fontSize: 13, fontWeight: '700', color: C.textPrimary },
+  commentTime:  { fontSize: 11, color: C.textMuted },
+  commentText:  { fontSize: 14, color: C.textSecondary, lineHeight: 21 },
+
+  // Input row
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 14,
+    paddingBottom: Platform.OS === 'ios' ? 6 : 12,
+  },
+  inputWrap:    { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: C.white, borderRadius: 24, borderWidth: 1.5, borderColor: C.border, paddingLeft: 16, paddingRight: 6, height: 46 },
+  commentInput: { flex: 1, fontSize: 14, color: C.textPrimary },
+  sendBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: C.navy,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });

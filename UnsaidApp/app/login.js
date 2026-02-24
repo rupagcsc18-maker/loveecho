@@ -6,17 +6,18 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
-  SafeAreaView,
   Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import userApi from './services/userApi';
 import { setAuthToken } from './services/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons'; // Added for the eye icon
+import { useAuth } from './context/AuthContext';
 
 
 export default function LoginScreen() {
@@ -24,7 +25,7 @@ export default function LoginScreen() {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  
+  const { setCurrentUser } = useAuth();
   // New state to toggle password visibility
   const [showPassword, setShowPassword] = useState(false);
 
@@ -37,6 +38,7 @@ export default function LoginScreen() {
   try {
     setLoading(true);
 
+    // 1️⃣ login
     const response = await userApi.login(
       identifier.trim(),
       password.trim()
@@ -44,10 +46,17 @@ export default function LoginScreen() {
 
     const { token } = response.data;
 
-    // ✅ ONLY THIS (stores + attaches header)
+    // 2️⃣ save token
     await setAuthToken(token);
 
-    router.replace('/(tabs)/home');
+    // 3️⃣ get real logged in user
+    const me = await userApi.getCurrentUser();
+
+    // 4️⃣ store user in context
+    setCurrentUser(me.data);
+
+    // 5️⃣ go home
+    router.replace('/home');
 
   } catch (error) {
     Alert.alert(

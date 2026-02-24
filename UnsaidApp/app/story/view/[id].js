@@ -23,8 +23,7 @@ import userApi from '../../services/userApi';
 import HashtagText from '../../components/HashtagText';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// Screen Width - Screen Margins (16*2) - Card Padding (20*2)
-const IMAGE_WIDTH = SCREEN_WIDTH - 72; 
+const IMAGE_WIDTH = SCREEN_WIDTH - 72;
 
 const backgroundImage = require('../../assets/storyBg2.png');
 
@@ -44,7 +43,7 @@ export default function StoryDetailScreen() {
   const scrollViewRef = useRef(null);
   const imageScrollRef = useRef(null);
   const inputRef = useRef(null);
-  
+
   const [story, setStory] = useState(null);
   const [comments, setComments] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
@@ -52,7 +51,7 @@ export default function StoryDetailScreen() {
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
-  
+
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
   const [loadedImages, setLoadedImages] = useState({});
 
@@ -67,11 +66,10 @@ export default function StoryDetailScreen() {
         storyService.getStoryById(id),
         userApi.getCurrentUser().catch(() => ({ data: null }))
       ]);
-      
+
       setStory(storyRes.data);
       setCurrentUser(userRes.data);
-      
-      // Load comments from response if present, else fetch
+
       if (storyRes.data.comments) {
         setComments(storyRes.data.comments);
       } else {
@@ -89,10 +87,7 @@ export default function StoryDetailScreen() {
   const scrollImages = (direction) => {
     const nextIndex = direction === 'next' ? currentImgIndex + 1 : currentImgIndex - 1;
     if (nextIndex >= 0 && nextIndex < (story?.imageUrls?.length || 0)) {
-      imageScrollRef.current?.scrollTo({
-        x: nextIndex * IMAGE_WIDTH,
-        animated: true
-      });
+      imageScrollRef.current?.scrollTo({ x: nextIndex * IMAGE_WIDTH, animated: true });
       setCurrentImgIndex(nextIndex);
     }
   };
@@ -133,7 +128,7 @@ export default function StoryDetailScreen() {
     try {
       setIsSubmitting(true);
       await storyService.addComment(id, commentText, replyingTo?.id);
-      
+
       const newComment = {
         id: Date.now().toString(),
         text: replyingTo ? `@${replyingTo.username} ${commentText}` : commentText,
@@ -163,10 +158,11 @@ export default function StoryDetailScreen() {
     <SafeAreaView style={styles.container}>
       <ImageBackground source={backgroundImage} style={styles.backgroundImage} resizeMode="cover">
         <View style={styles.tintOverlay} />
-        
-        <KeyboardAvoidingView 
-          style={{ flex: 1 }} 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}  // 'height' for Android
+          keyboardVerticalOffset={Platform.OS === 'android' ? 0 : 0}
         >
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.iconCircle}>
@@ -174,36 +170,48 @@ export default function StoryDetailScreen() {
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Story Echo</Text>
             <TouchableOpacity onPress={handleBookmark} style={styles.iconCircle}>
-              <FontAwesome 
-                name={story.isBookmarked ? "bookmark" : "bookmark-o"} 
-                size={20} 
-                color={story.isBookmarked ? "#1E88E5" : "#444"} 
+              <FontAwesome
+                name={story.isBookmarked ? "bookmark" : "bookmark-o"}
+                size={20}
+                color={story.isBookmarked ? "#1E88E5" : "#444"}
               />
             </TouchableOpacity>
           </View>
 
-          <ScrollView 
-            ref={scrollViewRef} 
-            showsVerticalScrollIndicator={false} 
+          <ScrollView
+            ref={scrollViewRef}
+            showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
           >
             <View style={styles.contentCard}>
+
+              {/* USER SECTION */}
               <View style={styles.userSection}>
                 <View style={[styles.avatar, story.anonymous && styles.anonymousAvatar]}>
                   {story.anonymous ? (
                     <Feather name="user-x" size={20} color="#90A4AE" />
+                  ) : story.user?.profileImageUrl ? (
+                    <Image source={{ uri: story.user.profileImageUrl }} style={styles.avatarImage} />
                   ) : (
-                    <Image source={{ uri: story.user?.profileImageUrl }} style={styles.avatarImage} />
+                    <View style={[styles.avatarImage, styles.avatarFallback]}>
+                      <Text style={styles.avatarFallbackText}>
+                        {(story.user?.username || 'U').charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
                   )}
                 </View>
                 <View style={styles.userInfo}>
-                  <Text style={styles.username}>{story.anonymous ? 'Anonymous' : story.user?.username}</Text>
+                  <Text style={styles.username}>
+                    {story.anonymous ? 'Anonymous' : story.user?.username}
+                  </Text>
                   <Text style={styles.date}>{formatTimeAgo(story.createdAt)}</Text>
                 </View>
               </View>
 
               <Text style={styles.title}>{story.title}</Text>
-              
+
               <HashtagText text={story.content} style={styles.contentBody} />
 
               {/* IMAGE GALLERY */}
@@ -221,10 +229,10 @@ export default function StoryDetailScreen() {
                   >
                     {story.imageUrls.map((url, index) => (
                       <View key={`${url}-${index}`} style={styles.imageContainer}>
-                        <Image 
-                          source={{ uri: url }} 
-                          style={styles.storyImage} 
-                          onLoad={() => setLoadedImages(prev => ({...prev, [index]: true}))}
+                        <Image
+                          source={{ uri: url }}
+                          style={styles.storyImage}
+                          onLoad={() => setLoadedImages(prev => ({ ...prev, [index]: true }))}
                         />
                         {!loadedImages[index] && (
                           <View style={styles.imageLoader}>
@@ -236,8 +244,8 @@ export default function StoryDetailScreen() {
                   </ScrollView>
 
                   {currentImgIndex > 0 && (
-                    <TouchableOpacity 
-                      style={[styles.navArrow, styles.leftArrow]} 
+                    <TouchableOpacity
+                      style={[styles.navArrow, styles.leftArrow]}
                       onPress={() => scrollImages('prev')}
                     >
                       <Feather name="chevron-left" size={24} color="#FFF" />
@@ -245,8 +253,8 @@ export default function StoryDetailScreen() {
                   )}
 
                   {currentImgIndex < story.imageUrls.length - 1 && (
-                    <TouchableOpacity 
-                      style={[styles.navArrow, styles.rightArrow]} 
+                    <TouchableOpacity
+                      style={[styles.navArrow, styles.rightArrow]}
                       onPress={() => scrollImages('next')}
                     >
                       <Feather name="chevron-right" size={24} color="#FFF" />
@@ -256,9 +264,9 @@ export default function StoryDetailScreen() {
                   {story.imageUrls.length > 1 && (
                     <View style={styles.paginationRow}>
                       {story.imageUrls.map((_, i) => (
-                        <View 
-                          key={`dot-${i}`} 
-                          style={[styles.dot, currentImgIndex === i && styles.activeDot]} 
+                        <View
+                          key={`dot-${i}`}
+                          style={[styles.dot, currentImgIndex === i && styles.activeDot]}
                         />
                       ))}
                     </View>
@@ -278,35 +286,58 @@ export default function StoryDetailScreen() {
 
               <View style={styles.inlineActionRow}>
                 <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
-                  <FontAwesome name={story.hasReacted ? "heart" : "heart-o"} size={18} color={story.hasReacted ? "#E53935" : "#555"} />
-                  <Text style={[styles.actionButtonText, story.hasReacted && {color: "#E53935"}]}>Like</Text>
+                  <FontAwesome
+                    name={story.hasReacted ? "heart" : "heart-o"}
+                    size={18}
+                    color={story.hasReacted ? "#E53935" : "#555"}
+                  />
+                  <Text style={[styles.actionButtonText, story.hasReacted && { color: "#E53935" }]}>Like</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionButton} onPress={() => inputRef.current?.focus()}>
                   <Feather name="message-circle" size={18} color="#555" />
                   <Text style={styles.actionButtonText}>Echo</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionButton} onPress={handleBookmark}>
-                   <FontAwesome name={story.isBookmarked ? "bookmark" : "bookmark-o"} size={17} color={story.isBookmarked ? "#1E88E5" : "#555"} />
-                   <Text style={[styles.actionButtonText, story.isBookmarked && {color: "#1E88E5"}]}>Save</Text>
+                  <FontAwesome
+                    name={story.isBookmarked ? "bookmark" : "bookmark-o"}
+                    size={17}
+                    color={story.isBookmarked ? "#1E88E5" : "#555"}
+                  />
+                  <Text style={[styles.actionButtonText, story.isBookmarked && { color: "#1E88E5" }]}>Save</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
+            {/* COMMENTS SECTION */}
             <Text style={styles.commentSectionTitle}>Community Echoes</Text>
-            
+
             {comments.map((item, index) => (
               <View key={item.id || index} style={[styles.commentItem, item.isReply && { marginLeft: 40 }]}>
-                <Image source={{ uri: item.profileImageUrl }} style={styles.commentAvatar} />
+
+                {/* COMMENT AVATAR */}
+                {item.profileImageUrl ? (
+                  <Image source={{ uri: item.profileImageUrl }} style={styles.commentAvatar} />
+                ) : (
+                  <View style={[styles.commentAvatar, styles.avatarFallback]}>
+                    <Text style={styles.avatarFallbackText}>
+                      {(item.username || 'U').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+
                 <View style={styles.commentBubble}>
                   <Text style={styles.commentUser}>{item.username}</Text>
                   <Text style={styles.commentText}>{item.text}</Text>
-                  <TouchableOpacity onPress={() => {setReplyingTo(item); inputRef.current?.focus();}} style={styles.replyButton}>
+                  <TouchableOpacity
+                    onPress={() => { setReplyingTo(item); inputRef.current?.focus(); }}
+                    style={styles.replyButton}
+                  >
                     <Text style={styles.replyButtonText}>Reply</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             ))}
-            
+
             <View style={{ height: 100 }} />
           </ScrollView>
 
@@ -314,7 +345,9 @@ export default function StoryDetailScreen() {
           <View style={styles.footer}>
             {replyingTo && (
               <View style={styles.replyingBar}>
-                <Text style={styles.replyingText}>Replying to <Text style={{fontWeight: '700'}}>{replyingTo.username}</Text></Text>
+                <Text style={styles.replyingText}>
+                  Replying to <Text style={{ fontWeight: '700' }}>{replyingTo.username}</Text>
+                </Text>
                 <TouchableOpacity onPress={() => setReplyingTo(null)}>
                   <Feather name="x-circle" size={18} color="#90A4AE" />
                 </TouchableOpacity>
@@ -322,16 +355,29 @@ export default function StoryDetailScreen() {
             )}
             <View style={styles.commentInputContainer}>
               <TextInput
-                ref={inputRef}
-                style={styles.input}
-                placeholder="Share your thoughts..."
-                placeholderTextColor="#90A4AE"
-                value={commentText}
-                onChangeText={setCommentText}
-                multiline
-              />
-              <TouchableOpacity style={styles.sendButton} onPress={handlePostComment} disabled={!commentText.trim()}>
-                <MaterialCommunityIcons name="send" size={22} color={commentText.trim() ? "#FFF" : "#B0BEC5"} />
+  ref={inputRef}
+  style={styles.input}
+  placeholder="Share your thoughts..."
+  placeholderTextColor="#90A4AE"
+  value={commentText}
+  onChangeText={setCommentText}
+  multiline
+  onFocus={() => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 300); // delay lets keyboard fully open first
+  }}
+/>
+              <TouchableOpacity
+                style={styles.sendButton}
+                onPress={handlePostComment}
+                disabled={!commentText.trim()}
+              >
+                <MaterialCommunityIcons
+                  name="send"
+                  size={22}
+                  color={commentText.trim() ? "#FFF" : "#B0BEC5"}
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -346,20 +392,20 @@ const styles = StyleSheet.create({
   backgroundImage: { flex: 1 },
   tintOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(253, 245, 230, 0.2)' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 16, 
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     height: 60,
-    backgroundColor: 'rgba(253, 245, 230, 0.9)', 
+    backgroundColor: 'rgba(253, 245, 230, 0.9)',
   },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#2D4F1E' },
   iconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.6)', justifyContent: 'center', alignItems: 'center' },
   scrollContent: { padding: 16 },
   contentCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    padding: 20, 
+    padding: 20,
     borderRadius: 24,
     elevation: 4,
     marginBottom: 25,
@@ -367,6 +413,17 @@ const styles = StyleSheet.create({
   userSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFF', overflow: 'hidden', borderWidth: 1, borderColor: '#EEE' },
   avatarImage: { width: '100%', height: '100%' },
+  anonymousAvatar: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#ECEFF1' },
+  avatarFallback: {
+    backgroundColor: '#C8E6C9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarFallbackText: {
+    fontWeight: '700',
+    color: '#2D4F1E',
+    fontSize: 14,
+  },
   userInfo: { marginLeft: 12 },
   username: { fontSize: 14, fontWeight: '700', color: '#333' },
   date: { fontSize: 11, color: '#90A4AE', marginTop: 2 },
@@ -387,16 +444,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F5F5F5'
   },
-  storyImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover'
-  },
-  imageLoader: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
+  storyImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  imageLoader: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
   navArrow: {
     position: 'absolute',
     top: '45%',
@@ -410,13 +459,7 @@ const styles = StyleSheet.create({
   },
   leftArrow: { left: 10 },
   rightArrow: { right: 10 },
-  paginationRow: {
-    position: 'absolute',
-    bottom: 15,
-    flexDirection: 'row',
-    alignSelf: 'center',
-    gap: 6
-  },
+  paginationRow: { position: 'absolute', bottom: 15, flexDirection: 'row', alignSelf: 'center', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.5)' },
   activeDot: { backgroundColor: '#FFF', width: 12 },
   contentBody: { fontSize: 16, color: '#444', lineHeight: 26 },

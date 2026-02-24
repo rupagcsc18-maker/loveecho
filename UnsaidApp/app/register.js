@@ -6,12 +6,12 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
-  SafeAreaView,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import userApi from './services/userApi';
 import { LinearGradient } from 'expo-linear-gradient';

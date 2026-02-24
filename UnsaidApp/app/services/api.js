@@ -1,6 +1,5 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { getToken, saveToken, deleteToken } from './tokenStorage';
 
 const API_URL = "https://loveecho-1.onrender.com/api";
 
@@ -9,30 +8,40 @@ const api = axios.create({
   timeout: 30000,
 });
 
-// =======================
-// TOKEN MANAGEMENT
-// =======================
 
-// Set token after login OR restore on app start
+// 🔥 ALWAYS attach token dynamically before request
+api.interceptors.request.use(
+  async (config) => {
+    const token = await getToken();
+    console.log("RAW TOKEN FROM STORAGE:", token);
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+
+// Save token after login
 export const setAuthToken = async (token) => {
   if (token) {
-    await AsyncStorage.setItem('token', token);
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    await saveToken(token);
   }
 };
 
-// Remove token on logout
+
+// Clear token on logout
 export const clearAuthToken = async () => {
-  await AsyncStorage.removeItem('token');
-  delete api.defaults.headers.common['Authorization'];
+  await deleteToken();
 };
 
-// Restore token when app launches
+
+// Restore token (just check existence)
 export const restoreAuthToken = async () => {
-  const token = await AsyncStorage.getItem('token');
-  if (token) {
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    return token;
-  }
-  return null;
+  return await getToken();
 };
+
+export default api;

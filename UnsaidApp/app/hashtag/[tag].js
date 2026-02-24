@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { storyService } from '../services/storyService';
+import { storyService } from './../services/storyService';
 
 export default function HashtagFeedScreen() {
   const { tag } = useLocalSearchParams();
