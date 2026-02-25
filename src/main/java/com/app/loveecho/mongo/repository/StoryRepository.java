@@ -49,6 +49,9 @@ public interface StoryRepository extends MongoRepository<Story, String> {
         String title,
         Pageable pageable
      );
+
+     long countByUserId(String userId);
+long countByUserIdAndVisibility(String userId, Visibility visibility);
      
 
 

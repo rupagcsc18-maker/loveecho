@@ -358,6 +358,22 @@ public ResponseEntity<List<StoryResponseDTO>> personalizedFeed(
     );
 }
 
+@GetMapping("/user/{username}/stats")
+public ResponseEntity<Map<String, Long>> getUserStats(
+        @PathVariable String username
+) {
+
+    long totalStories = storyService.getUserStoryCount(username);
+    long publicStories = storyService.getUserPublicStoryCount(username);
+
+    return ResponseEntity.ok(
+            Map.of(
+                    "totalStories", totalStories,
+                    "publicStories", publicStories
+            )
+    );
+}
+
 
 
 }

@@ -38,7 +38,7 @@ import lombok.RequiredArgsConstructor;
 
 
 @Service
-@RequiredArgsConstructor
+//@RequiredArgsConstructor
 public class StoryService {
 
     private final StoryRepository storyRepository;
@@ -46,6 +46,17 @@ public class StoryService {
     private final NotificationService notificationService;
     private final CloudinaryService cloudinaryService;
     private final UserPreferenceService preferenceService;
+    private final UserService userService;
+
+
+    public StoryService(StoryRepository storyRepository, UserRepository userRepository, NotificationService notificationService, CloudinaryService cloudinaryService, UserPreferenceService preferenceService, UserService userService) {
+        this.storyRepository = storyRepository;
+        this.userRepository = userRepository;
+        this.notificationService = notificationService;
+        this.cloudinaryService = cloudinaryService;
+        this.preferenceService = preferenceService;
+        this.userService = userService;
+    }
 
 
    
@@ -606,7 +617,22 @@ private int score(Story story, UserPreference pref) {
     return score;
 }
 
+public long getUserStoryCount(String username) {
 
+    Long userId = userService.getUserIdByUsername(username);
+
+    return storyRepository.countByUserId(String.valueOf(userId));
+}
+
+public long getUserPublicStoryCount(String username) {
+
+    Long userId = userService.getUserIdByUsername(username);
+
+    return storyRepository.countByUserIdAndVisibility(
+            String.valueOf(userId),
+            Visibility.PUBLIC
+    );
+}
 
 
 }
