@@ -53,11 +53,41 @@ public class UserController {
     // =======================
     // ✅ REGISTER
     // =======================
-    @PostMapping("/register")
+//     @PostMapping("/register")
+// public ResponseEntity<?> registerUser(@RequestBody User user) {
+//     try {
+//         User savedUser = userService.registerUser(user);
+//         return ResponseEntity.ok(mapToDTO(savedUser));
+
+//     } catch (RuntimeException e) {
+//         return ResponseEntity
+//                 .badRequest()
+//                 .body(Map.of("error", e.getMessage()));
+
+//     } catch (Exception e) {
+//         e.printStackTrace();
+//         return ResponseEntity
+//                 .internalServerError()
+//                 .body(Map.of("error", "Server error: " + e.getMessage()));
+//     }
+// }
+
+@PostMapping("/register")
 public ResponseEntity<?> registerUser(@RequestBody User user) {
     try {
+        // 1️⃣ Save user (password already encoded inside service)
         User savedUser = userService.registerUser(user);
-        return ResponseEntity.ok(mapToDTO(savedUser));
+
+        // 2️⃣ Directly generate token (no re-authentication)
+        String token = jwtUtil.generateToken(savedUser);
+
+        // 3️⃣ Return token + user
+        return ResponseEntity.ok(
+                Map.of(
+                        "token", token,
+                        "user", mapToDTO(savedUser)
+                )
+        );
 
     } catch (RuntimeException e) {
         return ResponseEntity
@@ -71,7 +101,6 @@ public ResponseEntity<?> registerUser(@RequestBody User user) {
                 .body(Map.of("error", "Server error: " + e.getMessage()));
     }
 }
-
 
     // =======================
     // 🔓 PUBLIC PROFILE
