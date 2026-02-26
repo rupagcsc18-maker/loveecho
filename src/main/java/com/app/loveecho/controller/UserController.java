@@ -25,10 +25,12 @@ import com.app.loveecho.dto.BioRequestDTO;
 import com.app.loveecho.dto.LoginRequest;
 import com.app.loveecho.dto.UpdateProfileRequest;
 import com.app.loveecho.dto.UserResponseDTO;
+import com.app.loveecho.jpa.entity.RefreshToken;
 import com.app.loveecho.jpa.entity.User;
 import com.app.loveecho.jpa.repository.UserRepository;
 import com.app.loveecho.security.JwtUtil;
 import com.app.loveecho.service.CloudinaryService;
+import com.app.loveecho.service.RefreshTokenService;
 import com.app.loveecho.service.UserService;
 
 @RestController
@@ -72,19 +74,54 @@ public class UserController {
 //     }
 // }
 
+// @PostMapping("/register")
+// public ResponseEntity<?> registerUser(@RequestBody User user) {
+//     try {
+//         // 1️⃣ Save user (password already encoded inside service)
+//         User savedUser = userService.registerUser(user);
+
+//         // 2️⃣ Directly generate token (no re-authentication)
+//         String token = jwtUtil.generateToken(savedUser);
+
+//         // 3️⃣ Return token + user
+//         return ResponseEntity.ok(
+//                 Map.of(
+//                         "token", token,
+//                         "user", mapToDTO(savedUser)
+//                 )
+//         );
+
+//     } catch (RuntimeException e) {
+//         return ResponseEntity
+//                 .badRequest()
+//                 .body(Map.of("error", e.getMessage()));
+
+//     } catch (Exception e) {
+//         e.printStackTrace();
+//         return ResponseEntity
+//                 .internalServerError()
+//                 .body(Map.of("error", "Server error: " + e.getMessage()));
+//     }
+// }
+
 @PostMapping("/register")
 public ResponseEntity<?> registerUser(@RequestBody User user) {
     try {
-        // 1️⃣ Save user (password already encoded inside service)
+        // 1️⃣ Save user
         User savedUser = userService.registerUser(user);
 
-        // 2️⃣ Directly generate token (no re-authentication)
-        String token = jwtUtil.generateToken(savedUser);
+        // 2️⃣ Generate access token
+        String accessToken = jwtUtil.generateToken(savedUser);
 
-        // 3️⃣ Return token + user
+        // 3️⃣ Generate refresh token
+        RefreshToken refreshToken =
+                refreshTokenService.createRefreshToken(savedUser);
+
+        // 4️⃣ Return same structure as login
         return ResponseEntity.ok(
                 Map.of(
-                        "token", token,
+                        "accessToken", accessToken,
+                        "refreshToken", refreshToken.getToken(),
                         "user", mapToDTO(savedUser)
                 )
         );
@@ -117,36 +154,93 @@ public ResponseEntity<?> registerUser(@RequestBody User user) {
     // =======================
     // 🔐 LOGIN (username OR email)
     // =======================
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        try {
-            User user = userService
-                    .findByUsernameOrEmail(request.getUsernameOrEmail())
-                    .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+//     @PostMapping("/login")
+//     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+//         try {
+//             User user = userService
+//                     .findByUsernameOrEmail(request.getUsernameOrEmail())
+//                     .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
-            authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            user.getUsername(),
-                            request.getPassword() // ✅ RAW password
-                    )
-            );
+//             authenticationManager.authenticate(
+//                     new UsernamePasswordAuthenticationToken(
+//                             user.getUsername(),
+//                             request.getPassword() // ✅ RAW password
+//                     )
+//             );
 
-            String token = jwtUtil.generateToken(user);
+//             String token = jwtUtil.generateToken(user);
 
-            return ResponseEntity.ok(
-                    Map.of(
-                            "token", token,
-                            "username", user.getUsername()
-                    )
-            );
+//             return ResponseEntity.ok(
+//                     Map.of(
+//                             "token", token,
+//                             "username", user.getUsername()
+//                     )
+//             );
 
-        } catch (BadCredentialsException e) {
-            return ResponseEntity
-                    .status(401)
-                    .body(Map.of("error", "Invalid username/email or password"));
-        }
-    }
+//         } catch (BadCredentialsException e) {
+//             return ResponseEntity
+//                     .status(401)
+//                     .body(Map.of("error", "Invalid username/email or password"));
+//         }
+//     }
+@Autowired
+private RefreshTokenService refreshTokenService;
 
+@PostMapping("/login")
+public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+
+    User user = userService
+            .findByUsernameOrEmail(request.getUsernameOrEmail())
+            .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+
+    authenticationManager.authenticate(
+            new UsernamePasswordAuthenticationToken(
+                    user.getUsername(),
+                    request.getPassword()
+            )
+    );
+
+    String accessToken = jwtUtil.generateToken(user);
+    RefreshToken refreshToken =
+            refreshTokenService.createRefreshToken(user);
+
+    return ResponseEntity.ok(
+            Map.of(
+                    "accessToken", accessToken,
+                    "refreshToken", refreshToken.getToken(),
+                    "user", mapToDTO(user)
+            )
+    );
+}
+
+@PostMapping("/refresh")
+public ResponseEntity<?> refreshToken(
+        @RequestBody Map<String, String> request
+) {
+
+    String requestRefreshToken = request.get("refreshToken");
+
+    if (requestRefreshToken == null) {
+    return ResponseEntity.badRequest()
+            .body(Map.of("error", "Refresh token missing"));
+}
+
+    RefreshToken token = refreshTokenService.findByToken(requestRefreshToken);
+    refreshTokenService.verifyExpiration(token);
+
+    User user = token.getUser();
+
+    String newAccessToken = jwtUtil.generateToken(user);
+RefreshToken newRefreshToken =
+        refreshTokenService.createRefreshToken(user);
+
+return ResponseEntity.ok(
+        Map.of(
+            "accessToken", newAccessToken,
+            "refreshToken", newRefreshToken.getToken()
+        )
+);
+}
     // =======================
     // 🔐 GET CURRENT USER
     // =======================
